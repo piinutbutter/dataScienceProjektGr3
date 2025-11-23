@@ -51,3 +51,11 @@ Example rows from `DAT_ASCII_GRXEUR_M1_2010.csv`:
 20101115 020200;6710.500000;6713.500000;6710.500000;6713.500000;0
 20101115 020300;6713.500000;6713.500000;6711.500000;6712.000000;0
 20101115 020400;6712.500000;6715.000000;6712.500000;6714.000000;0
+```
+
+
+### Approach
+No external market data API is used. Instead, I work with already downloaded ASCII CSV files.
+A Python script reads all DAT_ASCII_GRXEUR_M1_*.csv files, parses the timestamp and OHLC columns, and combines them into a unified, time-indexed DataFrame.
+Timestamps are parsed from YYYYMMDD HHMMSS into a proper datetime column and used as index.
+The cleaned data is stored as Parquet files for efficient downstream processing.
