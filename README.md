@@ -55,7 +55,7 @@ Example rows from `DAT_ASCII_GRXEUR_M1_2010.csv`:
 
 
 ### Approach
-No external market data API is used. Instead, I work with already downloaded ASCII CSV files.
+No external market data API is used. Instead, we work with already downloaded ASCII CSV files.
 A Python script reads all DAT_ASCII_GRXEUR_M1_*.csv files, parses the timestamp and OHLC columns, and combines them into a unified, time-indexed DataFrame.
 Timestamps are parsed from YYYYMMDD HHMMSS into a proper datetime column and used as index.
 The cleaned data is stored as Parquet files for efficient downstream processing.
