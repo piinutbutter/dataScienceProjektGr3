@@ -2,7 +2,7 @@ from pathlib import Path
 import pandas as pd
 
 # Pfade an dein Projekt anpassen
-RAW_DIR = Path("../../data/raw/GRXEUR_M1")        # hier liegen die DAT_ASCII_....csv
+RAW_DIR = Path("../../data/raw")        # hier liegen die DAT_ASCII_....csv
 OUT_DIR = Path("../../data/Raw/Bars_1m_GRXEUR")   # Zielordner für Parquet-Dateien
 
 OUT_DIR.mkdir(parents=True, exist_ok=True)
