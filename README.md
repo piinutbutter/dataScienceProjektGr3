@@ -21,7 +21,8 @@ The sign of this normalized slope is used as target (upward vs. downward / flat 
 ### Procedure Overview
 
 - Use historical 1-minute bar data (OHLC, volume) for GRXEUR from 2010 → 2018.
-- Clean and unify all yearly ASCII files into a single, time-indexed dataset.
+
+  (- Clean and unify all yearly ASCII files into a single, time-indexed dataset.)
 - Engineer technical features (returns, EMAs, slopes).
 - Compute forward-looking trend targets as described above.
 - Later: train and evaluate machine learning models to predict short-term trend direction.
