@@ -46,6 +46,8 @@ Each file contains 1-minute OHLC data with the following format (semicolon-separ
 
 Example rows from `DAT_ASCII_GRXEUR_M1_2010.csv`:
 
+[data_acquisition.py](scripts/02_data_understanding.py)
+
 ```text
 20101115 020000;6709.000000;6709.500000;6703.500000;6705.000000;0
 20101115 020100;6705.000000;6710.500000;6705.000000;6710.000000;0
