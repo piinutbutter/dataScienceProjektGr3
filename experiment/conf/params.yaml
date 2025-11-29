@@ -1,0 +1,23 @@
+DATA_ACQUISITION:
+  # Basisordner, in dem alle Rohdaten liegen (Parquet + ASCII)
+  DATA_PATH: "experiment/data/raw"
+
+  # getrennte Pfade
+  RAW_PATH: "experiment/data/raw"
+  CLEAN_PATH: "experiment/data/raw"
+
+  # Start/End-Dates
+  START_DATE: "2010-01-01"
+  END_DATE: "2018-12-31"
+
+# Allgemeine Projekt-Parameter
+PROJECT:
+  NAME: "GRXEUR Trend Prediction"
+  AUTHOR: "Team 3"
+  DESCRIPTION: "1-minute DAX-like index data (GRXEUR) for ML-based short-term trend forecasting"
+
+# Pfade für Experimente/Skripte
+PATHS:
+  SCRIPTS: "experiment/scripts"
+  DATA_UNDERSTANDING: "experiment/scripts/02_data_understanding"
+  DATA_ACQUISITION: "experiment/scripts/01_data_acquisition"

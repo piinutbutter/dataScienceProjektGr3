@@ -27,7 +27,7 @@ The sign of this normalized slope is used as target (upward vs. downward / flat 
 - Later: train and evaluate machine learning models to predict short-term trend direction.
 
 
-## Data Acquisition
+## Step 1 - Data Acquisition
 
 We use historical 1-minute bar data for the German equity index (symbol: GRXEUR) for the years 2010–2018.
 The data comes as ASCII CSV files exported from a trading data provider.
@@ -59,3 +59,73 @@ No external market data API is used. Instead, I work with already downloaded ASC
 A Python script reads all DAT_ASCII_GRXEUR_M1_*.csv files, parses the timestamp and OHLC columns, and combines them into a unified, time-indexed DataFrame.
 Timestamps are parsed from YYYYMMDD HHMMSS into a proper datetime column and used as index.
 The cleaned data is stored as Parquet files for efficient downstream processing.
+
+
+## Step 2 – Data Understanding
+This step explores the structure and behavior of the GRXEUR price data.
+The goal is to understand how the data behaves before building features and training models.
+
+**Script:**[data_understanding.py](experiment/scripts/02_data_understanding/data_understanding.py)
+This script loads the cleaned Parquet files, computes descriptive statistics, and visualizes key aspects of the dataset.
+
+### Plots:
+**1. Close Prices** (Example: 2015-01-01 to 2015-01-10)
+
+<img src="experiment/plots/close_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
+
+**Interpretation**
+The price moves between ~9400 and ~9900 index points during this period.
+Strong intraday movement is visible, including sudden drops and recoveries.
+Gaps in the line correspond to weekends and holidays, which is expected for index data.
+The pattern shows realistic market dynamics: volatility, trends, and short-term fluctuations.
+These observations confirm that the timestamp ordering and OHLC values were loaded correctly.
+
+**2. Volume**
+
+<img src="experiment/plots/volume_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
+
+**Interpretation**
+The volume is 0 for every single minute in the dataset.
+This is normal for synthetic or derivative index feeds (like GRXEUR), because indexes do not carry real trading volume.
+As a result, the volume column does not contain usable information.
+Conclusion: Volume will not be used for feature engineering.
+
+**3. Histogram of 1-Minute Returns**
+
+<img src="experiment/plots/returns_hist_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
+
+**Interpretation**
+The return distribution is centered very close to 0, meaning most 1-minute price changes are small.
+The peak around 0 indicates many “no-movement” or minimal-movement periods.
+The distribution has fat tails, which is typical for financial time series:
+rare but strong positive or negative price movements.
+The shape looks symmetric with slightly heavier density on the left tail, which is also normal.
+This confirms that the data behaves like a typical financial intraday time series.
+
+### Descriptive Statistics – Key Observations
+**Close Prices**
+
+Median price: around 9700–9800 points depending on the year.
+Minimum and maximum values look realistic for the DAX-like GRXEUR index.
+No extreme outliers or corrupted values.
+
+
+**Returns**
+
+Mean return is extremely close to 0, as expected for short intervals.
+Standard deviation of returns reflects normal market volatility.
+A few strong jumps exist, but they are rare and plausible (market openings, news events).
+
+
+**Timestamps**
+
+All data is chronologically ordered.
+Regular gaps correspond to non-trading hours.
+No duplicate timestamps detected.
+
+### Findings
+Data quality is good: the dataset is clean, chronologically consistent, and contains realistic price movements.
+Volume is meaningless in this dataset and will be excluded from modeling.
+Returns behave as expected for an intraday financial time series: centered around zero, heavy-tailed, and symmetric.
+Close price behavior matches normal DAX-like index dynamics, including volatility clusters and day-to-day patterns.
+This analysis confirms that the dataset is suitable for the next phase.
