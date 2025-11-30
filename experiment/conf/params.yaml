@@ -10,6 +10,27 @@ DATA_ACQUISITION:
   START_DATE: "2010-01-01"
   END_DATE: "2018-12-31"
 
+DATA_PREP:
+  # Vorhersage-Zeiträume für Trend-Richtung (in Minuten)
+  PREDICTION_PERIODS: [5, 10, 15, 30, 60]
+  
+  # EMA-Perioden (in Minuten)
+  EMA_PERIODS: [5, 10, 15, 30, 60]
+  
+  # Zeiträume für Slope-Berechnung (in Minuten)
+  SLOPE_PERIODS: [5, 10, 15, 30, 60]
+  
+  # Fenster für Z-Normalisierung (in Minuten)
+  Z_NORM_WINDOW: 60
+  
+  # Pfad für verarbeitete Daten (Train/Val/Test Splits)
+  PROCESSED_PATH: "experiment/data/processed"
+  
+  # Chronologische Split-Daten (YYYY-MM-DD Format)
+  TRAIN_DATE: "2016-12-31"
+  VALIDATION_DATE: "2017-12-31"
+  TEST_DATE: "2018-12-31"
+
 # Allgemeine Projekt-Parameter
 PROJECT:
   NAME: "GRXEUR Trend Prediction"

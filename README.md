@@ -13,14 +13,15 @@ The sign of this normalized slope is used as target (upward vs. downward / flat 
 
 
 **Input Variables**
--open, high, low, close
+- open, high, low, close
 
-**Input Features (planned)**
+**Input Features**
 
 - Normalized close price and 1-minute returns
 - Normalized exponential moving averages (EMA) over t = [5, 10, 15, 30, 60] minutes
 - Slopes and second order slopes of EMAs
-- Optionally: intraday time features (minute-of-day, day-of-week)
+- Intraday time features (minute-of-day, day-of-week, hour-of-day)
+- Z-normalized price and EMA features
 
 ### Procedure Overview
 
@@ -142,3 +143,43 @@ Volume is meaningless in this dataset and will be excluded from modeling.
 Returns behave as expected for an intraday financial time series: centered around zero, heavy-tailed, and symmetric.
 Close price behavior matches normal DAX-like index dynamics, including volatility clusters and day-to-day patterns.
 This analysis confirms that the dataset is suitable for the next phase.
+
+
+## Step 3 – Pre-Split Data Preparation
+
+This step prepares the data for machine learning by computing technical features and forward-looking trend targets, then splitting the data chronologically.
+
+**Script:** [main.py](experiment/scripts/03_pre_split_prep/main.py)
+
+### Targets
+
+For each prediction period t = [5, 10, 15, 30, 60] minutes, we compute:
+- **Normalized Trend Slope**: Linear regression slope of the future price window, normalized by mean price
+- **Trend Direction**: Sign of normalized slope (+1 upward, -1 downward, 0 flat)
+
+This creates 10 target columns: `target_trend_{t}m` and `target_direction_{t}m` for each period.
+
+### Features
+
+The script generates 27 technical features:
+- Normalized close price and 1-minute returns
+- Exponential Moving Averages (EMA) for periods [5, 10, 15, 30, 60] minutes (normalized and z-normalized)
+- First and second-order slopes of EMAs
+- Price range, intraday time features (minute-of-day, day-of-week, hour-of-day)
+
+All features use only past/present data (no lookahead bias).
+
+### Data Splits
+
+The data is split chronologically:
+- **Train**: 2010-01-01 to 2016-12-31 (7 years)
+- **Validation**: 2017-01-01 to 2017-12-31 (1 year)
+- **Test**: 2018-01-01 to 2018-12-31 (1 year)
+
+### Output
+
+Processed datasets are saved to `experiment/data/processed/`:
+- `GRXEUR_train.parquet`, `GRXEUR_validation.parquet`, `GRXEUR_test.parquet`
+- `features.txt` (list of feature names)
+
+Each file contains OHLC data, all 27 features, all 10 targets, with missing values removed.
