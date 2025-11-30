@@ -42,7 +42,7 @@ def main():
         print(f"Lade {path.name} ...")
         df_year = load_grxeur_ascii(path)
 
-        # Optional: Jahr extrahieren
+        # Jahr extrahieren
         year = path.stem.split("_")[-1]
         # Jahresweise abspeichern
         out_year_path = OUT_DIR / f"GRXEUR_M1_{year}.parquet"
@@ -51,7 +51,7 @@ def main():
 
         all_dfs.append(df_year)
 
-    # Optional: alles zu einem großen DataFrame zusammenfügen
+    # Alles zu einem großen DataFrame zusammenfügen
     full_df = pd.concat(all_dfs).sort_index()
     full_out = OUT_DIR / "GRXEUR_M1_2010_2018.parquet"
     full_df.to_parquet(full_out)
