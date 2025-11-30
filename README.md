@@ -11,6 +11,10 @@ For every minute in the period 2010-01-01 to 2018-12-31 we compute the linear re
 future price window of length t and normalize it by the mean price in that window.  
 The sign of this normalized slope is used as target (upward vs. downward / flat trend).
 
+
+**Input Variables**
+-open, high, low, close
+
 **Input Features (planned)**
 
 - Normalized close price and 1-minute returns
@@ -56,6 +60,12 @@ Example rows from `DAT_ASCII_GRXEUR_M1_2010.csv`:
 20101115 020400;6712.500000;6715.000000;6712.500000;6714.000000;0
 ```
 
+**Script**
+
+[data_acquisition.py](scripts/02_data_understanding.py)
+
+This script loads the CSV files, converts them into cleaned DataFrames with proper timestamps, and saves each year as an individual Parquet file. 
+It then combines all years into one combined dataset and saves that as a full Parquet file as well.
 
 ### Approach
 No external market data API is used. Instead, we work with already downloaded ASCII CSV files.
