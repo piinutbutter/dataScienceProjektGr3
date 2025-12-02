@@ -172,6 +172,34 @@ if "return_1m" in df.columns and df["return_1m"].notna().any():
     plt.savefig(fig3_path, dpi=150)
     plt.close(fig3)
 
+sample_day = "2015-01-05"
+try:
+    df_day = df.loc[sample_day]
+except Exception:
+    df_day = df[df.index.date == pd.to_datetime(sample_day).date()]
+
+if df_day.empty:
+    print(f"\nWARNUNG: Kein Intraday-Daten für {sample_day} vorhanden. Einzel-Tag-Plot übersprungen.")
+else:
+    from matplotlib.dates import DateFormatter, AutoDateLocator
+
+    fig_day = plt.figure(figsize=(14, 4))
+    plt.plot(df_day.index, df_day["close"], marker=".", linestyle="-", label=f"Close {sample_day}")
+    ax = plt.gca()
+    ax.xaxis.set_major_locator(AutoDateLocator())
+    ax.xaxis.set_major_formatter(DateFormatter("%H:%M"))
+    plt.title(f"GRXEUR Intraday Close am {sample_day}")
+    plt.xlabel("Uhrzeit")
+    plt.ylabel("Indexstand (Punkte)")
+    plt.grid(True)
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    fig_day_path = output_dir / f"close_day_{sample_day}.png"
+    plt.savefig(fig_day_path, dpi=150)
+    plt.close(fig_day)
+
+
 
 # 7) Einfache automatische Findings (Present findings)
 
