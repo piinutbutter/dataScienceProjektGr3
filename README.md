@@ -183,3 +183,85 @@ Processed datasets are saved to `experiment/data/processed/`:
 - `features.txt` (list of feature names)
 
 Each file contains OHLC data, all 27 features, all 10 targets, with missing values removed.
+
+## Step 4 - Post-Split Data Preparation
+In this step, the pre-split datasets (train, validation, test) are prepared for machine learning models.
+The goal is to create clean input matrices X and target vectors y for different prediction horizons.
+
+**Input Data**
+The script uses the files created in the pre-split step:
+* GRXEUR_train.parquet
+* GRXEUR_validation.parquet
+* GRXEUR_test.parquet
+* features.txt (list of all feature names)
+
+Each dataset already contains:
+* all engineered features
+* all target values for the prediction horizons
+* (5, 10, 15, 30, 60 minutes)
+
+**Feature and Target Selection**
+For each prediction horizon, the script:
+* loads the corresponding train, validation and test split
+* selects all features listed in features.txt as input X
+* selects:
+  * target_trend_<horizon>m as regression target
+  * target_direction_<horizon>m as classification target
+Example for horizon 5 minutes:
+  * target_trend_5m 
+  * target_direction_5m
+
+**Shuffling**
+Inside each split (train, validation, test):
+* the samples are shuffled using one single random permutation
+* the same permutation is applied to:
+  * features X
+  * directional targets y_dir
+  * trend targets y_trend
+This guarantees that features and targets always stay correctly aligned.
+The random seed is fixed using: RANDOM_STATE = 42. This makes the results reproducible.
+
+**Output Files**
+For each prediction horizon, one ML-ready file is created:
+GRXEUR_h5m_ml_ready.npz
+GRXEUR_h10m_ml_ready.npz
+GRXEUR_h15m_ml_ready.npz
+GRXEUR_h30m_ml_ready.npz
+GRXEUR_h60m_ml_ready.npz
+
+Each file contains:
+* X_train, y_train_dir, y_train_trend
+* X_val, y_val_dir, y_val_trend
+* X_test, y_test_dir, y_test_trend
+* feature_names
+These files can be directly used to train machine learning models.
+
+**Results Summary (from Console Output)**
+For each horizon, the following dataset sizes were created:
+* Train: ~1.3 million samples
+* Validation: ~206,000 samples
+* Test: ~213,000 samples
+
+Each sample contains:
+* 27 input features
+* 1 directional target (up / down)
+* 1 trend target (continuous value)
+
+Example of one feature row:
+* price_normalized
+* return_1m
+* ema_5m_normalized
+* ema_5m_z
+* ema_10m_normalized
+* ...
+Example of one target:
+* target_trend_5m = 0.0002048
+* target_direction_5m = 1
+
+**Final Result**
+After this step, the data is:
+* fully numerical
+* shuffled correctly
+* split into train, validation, and test sets
+* saved in a compact and ML-ready format
+The dataset is now ready for model training and evaluation.
