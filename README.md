@@ -78,13 +78,13 @@ The cleaned data is stored as Parquet files for efficient downstream processing.
 This step explores the structure and behavior of the GRXEUR price data.
 The goal is to understand how the data behaves before building features and training models.
 
-**Script:**[data_understanding.py](experiment/scripts/02_data_understanding/data_understanding.py)
+**Script:**[data_understanding.py](dataScienceProjectGr3/experiment/scripts/02_data_understanding/data_understanding.py)
 This script loads the cleaned Parquet files, computes descriptive statistics, and visualizes key aspects of the dataset.
 
 ### Plots:
 **1. Close Prices** (Example: 2015-01-01 to 2015-01-10)
 
-<img src="experiment/plots/close_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
+<img src="dataScienceProjectGr3/experiment/plots/close_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
 
 **Interpretation**
 The price moves between ~9400 and ~9900 index points during this period.
@@ -95,7 +95,7 @@ These observations confirm that the timestamp ordering and OHLC values were load
 
 **2. Volume**
 
-<img src="experiment/plots/volume_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
+<img src="dataScienceProjectGr3/experiment/plots/volume_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
 
 **Interpretation**
 The volume is 0 for every single minute in the dataset.
@@ -105,7 +105,7 @@ Conclusion: Volume will not be used for feature engineering.
 
 **3. Histogram of 1-Minute Returns**
 
-<img src="experiment/plots/returns_hist_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
+<img src="dataScienceProjectGr3/experiment/plots/returns_hist_2015-01-01_to_2015-01-10.png" alt="drawing" width="800"/>
 
 **Interpretation**
 The return distribution is centered very close to 0, meaning most 1-minute price changes are small.
@@ -148,7 +148,7 @@ This analysis confirms that the dataset is suitable for the next phase.
 
 This step prepares the data for machine learning by computing technical features and forward-looking trend targets, then splitting the data chronologically.
 
-**Script:** [main.py](experiment/scripts/03_pre_split_prep/main.py)
+**Script:** [main.py](dataScienceProjectGr3/experiment/scripts/03_pre_split_prep/main.py)
 
 ### Targets
 
@@ -327,7 +327,7 @@ The dataset is now ready for model training and evaluation.
 
 This step trains machine learning models on the prepared data to predict trend direction.
 
-**Script:** [experiment/scripts/06_model_training/](experiment/scripts/06_model_training/)
+**Script:** [experiment/scripts/06_model_training/](dataScienceProjectGr3/experiment/scripts/06_model_training/)
 
 ### Available Models
 
