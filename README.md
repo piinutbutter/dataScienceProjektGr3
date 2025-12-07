@@ -290,3 +290,35 @@ After this step, the data is:
 * split into train, validation, and test sets
 * saved in a compact and ML-ready format
 The dataset is now ready for model training and evaluation.
+
+## Step 5 \- Feature Selection (Correlation Analysis)
+
+*Skript:* 
+`experiment/scripts/05_feature_selection/main.py` 
+
+### Inputs
+1. Preprocessed training data 
+2. Feature list
+
+### Main Steps
+* Load `features.txt` and the Parquet training file
+* Choose a representative prediction horizon (default: `representative_horizon = 15`)
+* Drop NaN values and optionally sample to `max_samples` (default: 100000) for faster computation
+* Compute Pearson correlations:
+   - Feature\-feature correlation matrix
+   - Feature\-target correlations (ranking)
+* Visualize:
+   - Heatmap of feature\-feature correlations (`experiment/plots/06_correlations.png`)
+   - Horizontal bar plot of feature\-target correlations (`experiment/plots/06_correlations_target.png`)
+
+### Important Parameters / Adjustments
+1. `representative_horizon` — horizon in minutes (e.g. 5, 10, 15, 30, 60).  
+2. `symbol` — symbol to load (default: `GRXEUR`).  
+3. `max_samples` — sampling limit for large datasets.  
+4. `threshold` — threshold for strong correlations (e.g. `0.8`).
+
+### Interpretation of Results
+1. The heatmap reveals clusters of strong positive/negative correlations between features  
+2. `correlations_feature_pairs_ranked.csv` helps to identify redundant features  
+3. Highly correlated feature pairs (|r| > threshold) are candidates for dropping or dimensionality reduction  -> EMA Crossover=macd_normalized
+4. The target ranking shows which features are most linearly associated with `target_direction` — useful for feature prioritization
