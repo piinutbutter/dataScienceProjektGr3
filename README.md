@@ -15,13 +15,12 @@ The sign of this normalized slope is used as target (upward vs. downward / flat 
 **Input Variables**
 - open, high, low, close
 
-**Input Features**
+**Input Features (planned)**
 
 - Normalized close price and 1-minute returns
 - Normalized exponential moving averages (EMA) over t = [5, 10, 15, 30, 60] minutes
 - Slopes and second order slopes of EMAs
-- Intraday time features (minute-of-day, day-of-week, hour-of-day)
-- Z-normalized price and EMA features
+- Optionally: intraday time features (minute-of-day, day-of-week)
 
 ### Procedure Overview
 
@@ -161,11 +160,37 @@ This creates 10 target columns: `target_trend_{t}m` and `target_direction_{t}m` 
 
 ### Features
 
-The script generates 27 technical features:
+The script generates 45 technical features (previously 27):
+
+**Basic Price Features:**
 - Normalized close price and 1-minute returns
+- Z-normalized close price
+- Price range (high - low normalized)
+- Open-Close spread normalized
+
+**Moving Averages:**
 - Exponential Moving Averages (EMA) for periods [5, 10, 15, 30, 60] minutes (normalized and z-normalized)
-- First and second-order slopes of EMAs
-- Price range, intraday time features (minute-of-day, day-of-week, hour-of-day)
+- First and second-order slopes of EMAs (normalized)
+
+**Momentum & Volatility:**
+- Rolling volatility (std of returns) for periods [15, 30, 60] minutes
+- Momentum (price change) for periods [15, 30, 60] minutes
+
+**Technical Indicators:**
+- RSI (Relative Strength Index) with period 14
+- ATR (Average True Range) with period 14 (normalized)
+- Bollinger Bands position (period 20)
+- MACD (Moving Average Convergence Divergence): normalized MACD, signal, and histogram
+- EMA Crossover (fast-slow EMA difference, normalized)
+
+**Price Position Features:**
+- Distance from recent high/low (30-minute window)
+
+**Lagged Features:**
+- Lagged returns (1 and 2 periods)
+
+**Time Features:**
+- Intraday time features (minute-of-day, day-of-week, hour-of-day)
 
 All features use only past/present data (no lookahead bias).
 
@@ -182,7 +207,7 @@ Processed datasets are saved to `experiment/data/processed/`:
 - `GRXEUR_train.parquet`, `GRXEUR_validation.parquet`, `GRXEUR_test.parquet`
 - `features.txt` (list of feature names)
 
-Each file contains OHLC data, all 27 features, all 10 targets, with missing values removed.
+Each file contains OHLC data, all 45 features, all 10 targets, with missing values removed.
 
 ## Step 4 - Post-Split Data Preparation
 In this step, the pre-split datasets (train, validation, test) are prepared for machine learning models.
@@ -243,7 +268,7 @@ For each horizon, the following dataset sizes were created:
 * Test: ~213,000 samples
 
 Each sample contains:
-* 27 input features
+* 45 input features (previously 27)
 * 1 directional target (up / down)
 * 1 trend target (continuous value)
 
