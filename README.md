@@ -322,3 +322,73 @@ The dataset is now ready for model training and evaluation.
 2. `correlations_feature_pairs_ranked.csv` helps to identify redundant features  
 3. Highly correlated feature pairs (|r| > threshold) are candidates for dropping or dimensionality reduction  -> EMA Crossover=macd_normalized
 4. The target ranking shows which features are most linearly associated with `target_direction` — useful for feature prioritization
+
+## Step 6 - Model Training
+
+This step trains machine learning models on the prepared data to predict trend direction.
+
+**Script:** [experiment/scripts/06_model_training/](experiment/scripts/06_model_training/)
+
+### Available Models
+
+**1. Feed Forward Neural Network** (`01_feed_forward.py`)
+
+Trains a 2-hidden-layer MLP regressor with early stopping.
+
+**Output:**
+- `best_acc_model_h{horizon}m.pt` - Best accuracy checkpoint
+- `best_loss_model_h{horizon}m.pt` - Best loss checkpoint
+- `training_h{horizon}m.log` - Training log
+- `training_metrics_h{horizon}m.png` - Training curves plot
+
+**2. Decision Tree** (`02_decision_tree.py`)
+
+Trains a scikit-learn DecisionTreeClassifier.
+
+**Output:**
+- `decision_tree_h{horizon}m.pkl` - Trained decision tree
+- `decision_tree_h{horizon}m_rules.txt` - Text representation of tree rules
+
+**3. Random Forest** (`03_random_forest.py`)
+
+Trains a scikit-learn RandomForestClassifier (ensemble of decision trees).
+
+**Output:**
+- `random_forest_h{horizon}m.pkl` - Trained random forest
+- `random_forest_h{horizon}m_feature_importance.csv` - Feature importance ranking
+
+**4. Logistic Regression** (`04_logistic_regression.py`)
+
+Trains a Logistic Regression baseline model.
+
+**Output:**
+- `logistic_regression_h{horizon}m.pkl` - Trained logistic regression model
+- `logistic_regression_h{horizon}m_coefficients.csv` - Feature coefficients (interpretable)
+
+### Configuration
+
+Model parameters can be adjusted in `experiment/conf/params.yaml` under the `MODELING` section:
+
+```yaml
+MODELING:
+  MODEL_PATH: "experiment/models"
+  HIDDEN1: 128
+  HIDDEN2: 64
+  DROPOUT: 0.1
+  LR: 0.001
+  WEIGHT_DECAY: 0.0001
+  EPOCHS: 25
+  PATIENCE: 5
+  BATCH_SIZE: 2048
+  DT_MAX_DEPTH: 8
+  RF_N_ESTIMATORS: 100
+  RF_MAX_DEPTH: 10
+  LR_C: 1.0
+  RANDOM_STATE: 42
+```
+
+### Workflow
+
+Models are trained separately for each prediction horizon (5m, 10m, 15m, 30m, 60m). Each model predicts the trend direction (binary classification: up vs down/flat).
+
+All trained models are saved in `experiment/models/`.
