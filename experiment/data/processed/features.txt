@@ -35,7 +35,6 @@ bb_position_20
 macd_normalized
 macd_signal_normalized
 macd_histogram_normalized
-ema_crossover_5m_60m
 return_lag_1
 return_lag_2
 dist_from_high_30m

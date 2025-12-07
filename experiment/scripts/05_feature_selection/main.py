@@ -92,11 +92,15 @@ print(f"\nBottom 10 features correlated with {target_col}:")
 for feat, corr_val in target_corr.tail(10).items():
     print(f"  {feat}: {corr_val:.6f}")
 
+# Create output directory for correlations
+corr_output_dir = processed_path / "correlations"
+corr_output_dir.mkdir(exist_ok=True)
+
 # Visualizations
 print("\nCreating visualizations...")
 
 # 1. Feature-Feature correlation matrix
-plt.figure(figsize=(12, 10))
+plt.figure(figsize=(14, 12))
 sns.heatmap(
     feature_corr,
     annot=False,
@@ -106,14 +110,54 @@ sns.heatmap(
     vmax=1,
     square=True,
     cbar_kws={'label': 'Correlation'},
-    xticklabels=False,
-    yticklabels=False
+    xticklabels=True,
+    yticklabels=True
 )
+plt.xticks(rotation=90, ha='right', fontsize=7)
+plt.yticks(rotation=0, fontsize=7)
 plt.title('Feature-Feature Correlation Matrix')
 plt.tight_layout()
 plt.savefig(output_dir / '06_correlations.png', dpi=150)
 plt.close()
 print(f"  Saved: {output_dir / '06_correlations.png'}")
+
+# Create ranked correlation table
+print("\nCreating ranked correlation table...")
+correlation_pairs = []
+for i in range(len(feature_list)):
+    for j in range(i+1, len(feature_list)):
+        feat1 = feature_list[i]
+        feat2 = feature_list[j]
+        corr_val = feature_corr.iloc[i, j]
+        correlation_pairs.append({
+            'feature_1': feat1,
+            'feature_2': feat2,
+            'correlation': corr_val,
+            'abs_correlation': abs(corr_val)
+        })
+
+# Convert to DataFrame and sort by absolute correlation
+corr_table = pd.DataFrame(correlation_pairs)
+corr_table = corr_table.sort_values('abs_correlation', ascending=False).reset_index(drop=True)
+
+# Save full table
+corr_table.to_csv(corr_output_dir / 'correlations_feature_pairs_ranked.csv', index=False)
+print(f"  Saved full ranked table: {corr_output_dir / 'correlations_feature_pairs_ranked.csv'}")
+
+# Show top correlations
+print(f"\nTop 20 highest feature correlations:")
+print(corr_table[['feature_1', 'feature_2', 'correlation']].head(20).to_string(index=False))
+
+# Show highly correlated pairs (above threshold)
+threshold = 0.8
+high_corr = corr_table[corr_table['abs_correlation'] > threshold]
+if len(high_corr) > 0:
+    print(f"\nFeature pairs with |correlation| > {threshold} ({len(high_corr)} pairs):")
+    print(high_corr[['feature_1', 'feature_2', 'correlation']].to_string(index=False))
+    high_corr.to_csv(corr_output_dir / f'correlations_high_{threshold}.csv', index=False)
+    print(f"  Saved high correlations to: {corr_output_dir / f'correlations_high_{threshold}.csv'}")
+else:
+    print(f"\nNo feature pairs with |correlation| > {threshold}")
 
 # 2. Feature-Target correlation ranking
 plt.figure(figsize=(8, 12))
@@ -130,10 +174,7 @@ plt.savefig(output_dir / '06_correlations_target.png', dpi=150)
 plt.close()
 print(f"  Saved: {output_dir / '06_correlations_target.png'}")
 
-# Save ranking to CSV
-corr_output_dir = processed_path / "correlations"
-corr_output_dir.mkdir(exist_ok=True)
-
+# Save target ranking to CSV
 target_corr_df = pd.DataFrame({
     'feature': target_corr.index,
     'correlation_with_target': target_corr.values

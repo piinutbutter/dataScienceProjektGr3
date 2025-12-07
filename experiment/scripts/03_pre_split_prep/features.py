@@ -193,13 +193,13 @@ def generate_features(
         
         feature_list.extend(["macd_normalized", "macd_signal_normalized", "macd_histogram_normalized"])
     
-    # 12. EMA Crossover (only main fast-slow crossover)
-    if len(ema_periods) >= 2:
-        fast_period = min(ema_periods)
-        slow_period = max(ema_periods)
-        crossover_col = f"ema_crossover_{fast_period}m_{slow_period}m"
-        df[crossover_col] = (df[f"ema_{fast_period}m"] - df[f"ema_{slow_period}m"]) / (prices + 1e-8)
-        feature_list.append(crossover_col)
+    # 12. EMA Crossover (only main fast-slow crossover) - DISABLED (identical to macd_normalized)
+    # if len(ema_periods) >= 2:
+    #     fast_period = min(ema_periods)
+    #     slow_period = max(ema_periods)
+    #     crossover_col = f"ema_crossover_{fast_period}m_{slow_period}m"
+    #     df[crossover_col] = (df[f"ema_{fast_period}m"] - df[f"ema_{slow_period}m"]) / (prices + 1e-8)
+    #     feature_list.append(crossover_col)
     
     # 13. Lagged Returns (only 1-2 lags)
     for lag in [1, 2]:
