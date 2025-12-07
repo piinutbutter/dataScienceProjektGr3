@@ -1,0 +1,41 @@
+2025-12-07 22:38:56,287 | INFO | Epoch 001 | Val acc=0.485284 | Best val acc=0.000000 | Val acc rand=0.514629 | Val loss=0.000678 | Best val loss=inf
+2025-12-07 22:38:56,306 | INFO | Saved best-accuracy checkpoint at epoch 1
+2025-12-07 22:38:56,310 | INFO | Saved best-loss checkpoint at epoch 1
+2025-12-07 22:39:22,765 | INFO | Epoch 002 | Val acc=0.509436 | Best val acc=0.485284 | Val acc rand=0.514629 | Val loss=0.000180 | Best val loss=0.000678
+2025-12-07 22:39:22,769 | INFO | Saved best-accuracy checkpoint at epoch 2
+2025-12-07 22:39:22,772 | INFO | Saved best-loss checkpoint at epoch 2
+2025-12-07 22:39:58,603 | INFO | Epoch 003 | Val acc=0.486344 | Best val acc=0.509436 | Val acc rand=0.514629 | Val loss=0.000085 | Best val loss=0.000180
+2025-12-07 22:39:58,609 | INFO | Saved best-loss checkpoint at epoch 3
+2025-12-07 22:40:30,479 | INFO | Epoch 004 | Val acc=0.485371 | Best val acc=0.509436 | Val acc rand=0.514629 | Val loss=0.000382 | Best val loss=0.000085
+2025-12-07 22:41:08,224 | INFO | Epoch 005 | Val acc=0.505880 | Best val acc=0.509436 | Val acc rand=0.514629 | Val loss=0.000013 | Best val loss=0.000085
+2025-12-07 22:41:08,228 | INFO | Saved best-loss checkpoint at epoch 5
+2025-12-07 22:41:43,926 | INFO | Epoch 006 | Val acc=0.491202 | Best val acc=0.509436 | Val acc rand=0.514629 | Val loss=0.000014 | Best val loss=0.000013
+2025-12-07 22:42:14,033 | INFO | Epoch 007 | Val acc=0.488817 | Best val acc=0.509436 | Val acc rand=0.514629 | Val loss=0.000013 | Best val loss=0.000013
+2025-12-07 22:42:42,535 | INFO | Epoch 008 | Val acc=0.509732 | Best val acc=0.509436 | Val acc rand=0.514629 | Val loss=0.000006 | Best val loss=0.000013
+2025-12-07 22:42:42,540 | INFO | Saved best-accuracy checkpoint at epoch 8
+2025-12-07 22:42:42,542 | INFO | Saved best-loss checkpoint at epoch 8
+2025-12-07 22:43:08,344 | INFO | Epoch 009 | Val acc=0.502734 | Best val acc=0.509732 | Val acc rand=0.514629 | Val loss=0.000001 | Best val loss=0.000006
+2025-12-07 22:43:08,347 | INFO | Saved best-loss checkpoint at epoch 9
+2025-12-07 22:43:34,379 | INFO | Epoch 010 | Val acc=0.508957 | Best val acc=0.509732 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000001
+2025-12-07 22:43:34,382 | INFO | Saved best-loss checkpoint at epoch 10
+2025-12-07 22:43:59,530 | INFO | Epoch 011 | Val acc=0.516226 | Best val acc=0.509732 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:43:59,533 | INFO | Saved best-accuracy checkpoint at epoch 11
+2025-12-07 22:43:59,536 | INFO | Saved best-loss checkpoint at epoch 11
+2025-12-07 22:44:32,693 | INFO | Epoch 012 | Val acc=0.510578 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:44:32,698 | INFO | Saved best-loss checkpoint at epoch 12
+2025-12-07 22:44:59,823 | INFO | Epoch 013 | Val acc=0.485168 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:45:25,281 | INFO | Epoch 014 | Val acc=0.493946 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:45:25,284 | INFO | Saved best-loss checkpoint at epoch 14
+2025-12-07 22:45:51,421 | INFO | Epoch 015 | Val acc=0.511841 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:45:51,424 | INFO | Saved best-loss checkpoint at epoch 15
+2025-12-07 22:46:18,691 | INFO | Epoch 016 | Val acc=0.514285 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:46:48,591 | INFO | Epoch 017 | Val acc=0.515955 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:47:14,160 | INFO | Epoch 018 | Val acc=0.514687 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:47:14,167 | INFO | Saved best-loss checkpoint at epoch 18
+2025-12-07 22:47:39,678 | INFO | Epoch 019 | Val acc=0.514638 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:48:05,195 | INFO | Epoch 020 | Val acc=0.481306 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:48:30,306 | INFO | Epoch 021 | Val acc=0.485366 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:48:58,077 | INFO | Epoch 022 | Val acc=0.485608 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:49:24,051 | INFO | Epoch 023 | Val acc=0.514261 | Best val acc=0.516226 | Val acc rand=0.514629 | Val loss=0.000000 | Best val loss=0.000000
+2025-12-07 22:49:24,052 | INFO | Early stopping at epoch 23
+2025-12-07 22:49:24,488 | INFO | Saved training metrics plot to: C:\Users\phili\IdeaProjects\dataScienceProjektGr3\experiment\models\training_metrics_h15m.png

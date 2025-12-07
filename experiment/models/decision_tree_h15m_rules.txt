@@ -1,0 +1,97 @@
+Decision Tree Rules for Horizon 15m
+================================================================================
+
+|--- slope_ema_60m_normalized <= 0.00
+|   |--- price_z <= -1.04
+|   |   |--- minute_of_day <= 203.50
+|   |   |   |--- ema_60m_normalized <= 0.00
+|   |   |   |   |--- atr_14 <= 0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- atr_14 >  0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |--- ema_60m_normalized >  0.00
+|   |   |   |   |--- day_of_week <= 1.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- day_of_week >  1.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |--- minute_of_day >  203.50
+|   |   |   |--- dist_from_low_30m <= 0.00
+|   |   |   |   |--- macd_signal_normalized <= -0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- macd_signal_normalized >  -0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |--- dist_from_low_30m >  0.00
+|   |   |   |   |--- momentum_60m <= -0.02
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- momentum_60m >  -0.02
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |--- price_z >  -1.04
+|   |   |--- minute_of_day <= 610.50
+|   |   |   |--- ema_60m_normalized <= 0.00
+|   |   |   |   |--- minute_of_day <= 257.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- minute_of_day >  257.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |--- ema_60m_normalized >  0.00
+|   |   |   |   |--- volatility_60m <= 0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- volatility_60m >  0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |--- minute_of_day >  610.50
+|   |   |   |--- ema_15m_normalized <= -0.00
+|   |   |   |   |--- ema_30m_normalized <= -0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- ema_30m_normalized >  -0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |--- ema_15m_normalized >  -0.00
+|   |   |   |   |--- macd_normalized <= 0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- macd_normalized >  0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|--- slope_ema_60m_normalized >  0.00
+|   |--- price_normalized <= 0.00
+|   |   |--- minute_of_day <= 913.50
+|   |   |   |--- rsi_14 <= 73.93
+|   |   |   |   |--- volatility_30m <= 0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- volatility_30m >  0.00
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |--- rsi_14 >  73.93
+|   |   |   |   |--- ema_30m_z <= -0.30
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- ema_30m_z >  -0.30
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |--- minute_of_day >  913.50
+|   |   |   |--- minute_of_day <= 939.50
+|   |   |   |   |--- ema_30m_z <= 2.40
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- ema_30m_z >  2.40
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |--- minute_of_day >  939.50
+|   |   |   |   |--- minute_of_day <= 982.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- minute_of_day >  982.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |--- price_normalized >  0.00
+|   |   |--- atr_14 <= 0.00
+|   |   |   |--- price_normalized <= 0.00
+|   |   |   |   |--- ema_30m_z <= 1.28
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- ema_30m_z >  1.28
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |--- price_normalized >  0.00
+|   |   |   |   |--- day_of_week <= 3.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- day_of_week >  3.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |--- atr_14 >  0.00
+|   |   |   |--- volatility_15m <= 0.00
+|   |   |   |   |--- ema_30m_z <= 1.29
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- ema_30m_z >  1.29
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |--- volatility_15m >  0.00
+|   |   |   |   |--- minute_of_day <= 848.50
+|   |   |   |   |   |--- truncated branch of depth 4
+|   |   |   |   |--- minute_of_day >  848.50
+|   |   |   |   |   |--- truncated branch of depth 4

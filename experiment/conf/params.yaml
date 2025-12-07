@@ -42,3 +42,36 @@ PATHS:
   SCRIPTS: "experiment/scripts"
   DATA_UNDERSTANDING: "experiment/scripts/02_data_understanding"
   DATA_ACQUISITION: "experiment/scripts/01_data_acquisition"
+
+# Model Training Parameters
+MODELING:
+  # Model output path
+  MODEL_PATH: "experiment/models"
+  
+  # Neural Network parameters
+  HIDDEN1: 128
+  HIDDEN2: 64
+  DROPOUT: 0.1
+  LR: 0.001
+  WEIGHT_DECAY: 0.0001
+  EPOCHS: 25
+  PATIENCE: 5
+  BATCH_SIZE: 2048
+  
+  # Decision Tree parameters
+  DT_MAX_DEPTH: 8
+  DT_MIN_SAMPLES_SPLIT: 2
+  DT_MIN_SAMPLES_LEAF: 1
+  
+  # Random Forest parameters
+  RF_N_ESTIMATORS: 100
+  RF_MAX_DEPTH: 10
+  RF_MIN_SAMPLES_SPLIT: 2
+  RF_MIN_SAMPLES_LEAF: 1
+  
+  # Logistic Regression parameters
+  LR_C: 1.0
+  LR_MAX_ITER: 1000
+  
+  # Random state for reproducibility
+  RANDOM_STATE: 42
