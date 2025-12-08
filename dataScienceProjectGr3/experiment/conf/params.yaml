@@ -1,6 +1,5 @@
 DATA_ACQUISITION:
-  # Basisordner, in dem alle Rohdaten liegen (Parquet + ASCII)
-  DATA_PATH: "experiment/data/raw"
+  DATA_PATH: data/raw
 
   # getrennte Pfade
   RAW_PATH: "experiment/data/raw"

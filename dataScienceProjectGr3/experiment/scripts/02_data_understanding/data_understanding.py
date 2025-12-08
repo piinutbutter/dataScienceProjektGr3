@@ -9,35 +9,72 @@ Dieses Skript:
 - gibt ein paar automatische "Findings" aus
 """
 
+import os
 import matplotlib
 import pandas as pd
 import yaml
 from pathlib import Path
 
-
-matplotlib.use("TkAgg")
+# 0) matplotlib Backend: versuche TkAgg, fallback auf Agg (z.B. bei headless/CI)
+try:
+    matplotlib.use("TkAgg")
+except Exception:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-# 1) Konfiguration laden
+# Projekt-Root (`experiment`-Verzeichnis)
+project_root = Path(__file__).resolve().parents[2]
 
-# Pfad zur params.yaml
-params = yaml.safe_load(open("experiment/conf/params.yaml"))
+# 1) Konfiguration laden (relativ zum Skript / Projekt-Root)
+config_path = project_root / "conf" / "params.yaml"
+if not config_path.exists():
+    raise FileNotFoundError(f"params.yaml nicht gefunden: {config_path.resolve()}")
+with config_path.open("r", encoding="utf-8") as f:
+    params = yaml.safe_load(f)
 
-# Basis-Datenpfad aus der YAML lesen
+# Basis-Datenpfad aus der YAML lesen; relativ zum Projekt-Root interpretieren, falls nicht absolut
 data_path = Path(params["DATA_ACQUISITION"]["DATA_PATH"])
+if not data_path.is_absolute():
+    data_path = project_root / data_path
+data_path = data_path.resolve()
 
-bars_file = data_path / "Bars_1m_GRXEUR" / "GRXEUR_M1_2010_2018.parquet"
+# robustes Auffinden der Parquet-Datei im Ordner Bars_1m_GRXEUR
+bars_dir = data_path / "Bars_1m_GRXEUR"
+expected_name = "GRXEUR_M1_2010_2018.parquet"
+expected_file = bars_dir / expected_name
 
+if expected_file.exists():
+    bars_file = expected_file
+else:
+    if bars_dir.exists():
+        parquet_files = sorted(bars_dir.glob("*.parquet"))
+        if parquet_files:
+            bars_file = parquet_files[0]
+            print(f"WARNUNG: Erwartete Datei nicht gefunden. Verwende stattdessen: {bars_file.resolve()}")
+        else:
+            raise FileNotFoundError(f"Kein .parquet in {bars_dir.resolve()}")
+    else:
+        raise FileNotFoundError(f"Verzeichnis nicht gefunden: {bars_dir.resolve()}")
 
-# 2) Daten laden und Grundstruktur prüfen
-
-print(f"Lade Daten aus: {bars_file}")
-df = pd.read_parquet(bars_file)
+print(f"Lade Daten aus: {bars_file.resolve()}")
+try:
+    df = pd.read_parquet(bars_file)
+except Exception as e:
+    # zusätzliche Hinweise, falls Engine fehlt
+    engine_hint = ""
+    try:
+        import pyarrow  # type: ignore
+    except Exception:
+        engine_hint = " Installiere `pyarrow` oder `fastparquet` (z.B. `pip install pyarrow`)."
+    raise RuntimeError(
+        f"Fehler beim Lesen von {bars_file.resolve()}: {e}\n{engine_hint}"
+    ) from e
 
 # Sicherstellen, dass ein Zeitstempel vorhanden ist und als Index gesetzt wird.
-# Fall A: es gibt eine Spalte 'timestamp'
-# Fall B: Index ist schon Zeit, aber noch nicht als datetime typisiert
+if df.empty:
+    raise RuntimeError(f"DataFrame ist leer nach dem Laden von {bars_file.resolve()}")
+
 if "timestamp" in df.columns:
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df = df.set_index("timestamp").sort_index()
@@ -52,7 +89,7 @@ print("\nSpalten und Datentypen:")
 print(df.dtypes)
 
 
-# 3) Relevante Spalten erklären (Explain relevant data columns)
+# 3) Relevante Spalten erklären
 
 column_descriptions = {
     "open": "Eröffnungskurs der Minute in Indexpunkten (GRXEUR).",
@@ -70,12 +107,11 @@ for col, desc in column_descriptions.items():
         print(f"- {col}: (nicht im DataFrame vorhanden)")
 
 
-# 4) Beschreibende Statistiken (Show relevant descriptive statistics)
+# 4) Beschreibende Statistiken
 
 print("\nBeschreibende Statistik für alle numerischen Spalten:")
-print(df.describe().T)  # .T = transponiert, damit Spalten zeilenweise dargestellt werden
+print(df.describe().T)
 
-# spezifischer Blick auf 'close' und 'volume'
 if "close" in df.columns:
     print("\nBeschreibende Statistik für 'close':")
     print(df["close"].describe())
@@ -85,12 +121,10 @@ if "volume" in df.columns:
     print(df["volume"].describe())
 
 
-# 5) 1-Minuten-Returns berechnen und untersuchen
+# 5) 1-Minuten-Returns berechnen
 
 if "close" in df.columns:
-    # Prozentuale Veränderung von Minute zu Minute
     df["return_1m"] = df["close"].pct_change()
-
     print("\nBeschreibende Statistik für 1-Minuten-Returns:")
     print(df["return_1m"].describe())
 
@@ -101,12 +135,12 @@ if "close" in df.columns:
     print(df["return_1m"].nsmallest(5))
 else:
     print("\nHinweis: 'close'-Spalte fehlt, Returns können nicht berechnet werden.")
-    df["return_1m"] = None
+    df["return_1m"] = pd.Series(index=df.index, dtype=float)
 
 
-# 6) Plots erzeugen (Show relevant plots of variables)
+# 6) Plots erzeugen
 
-# Wir wählen einen Beispielzeitraum für die Visualisierung
+# Beispielzeitraum für Visualisierung
 start_date = "2015-01-01"
 end_date = "2015-01-10"
 
@@ -118,10 +152,10 @@ if df_sample.empty:
         "Bitte Datumsspanne im Skript anpassen."
     )
 else:
-# Plot 1: Schlusskurs (Close) im Zeitverlauf
-    output_dir = Path("experiment/plots")
+    output_dir = project_root / "plots"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Plot 1: Close
     fig1 = plt.figure(figsize=(14, 7))
     plt.plot(df_sample.index, df_sample["close"], label="Close (GRXEUR)")
     plt.title(f"GRXEUR Schlusskurse von {start_date} bis {end_date}")
@@ -131,10 +165,10 @@ else:
     plt.legend()
     plt.tight_layout()
     fig1_path = output_dir / f"close_{start_date}_to_{end_date}.png"
-    plt.savefig(fig1_path, dpi=150)
+    fig1.savefig(fig1_path, dpi=150)
     plt.close(fig1)
 
-    # Plot 2: Volumen im Zeitverlauf
+    # Plot 2: Volume
     if "volume" in df_sample.columns:
         fig2 = plt.figure(figsize=(14, 5))
         plt.plot(df_sample.index, df_sample["volume"], label="Volume", alpha=0.7)
@@ -145,18 +179,17 @@ else:
         plt.legend()
         plt.tight_layout()
         fig2_path = output_dir / f"volume_{start_date}_to_{end_date}.png"
-        plt.savefig(fig2_path, dpi=150)
+        fig2.savefig(fig2_path, dpi=150)
         plt.close(fig2)
 
-# Plot 3: Histogramm der 1-Minuten-Returns über den gesamten Datensatz
+# Histogramm der 1-Minuten-Returns
 if "return_1m" in df.columns and df["return_1m"].notna().any():
-    output_dir = Path("experiment/plots")
+    output_dir = project_root / "plots"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     fig3 = plt.figure(figsize=(10, 6))
     returns = df["return_1m"].dropna()
 
-    # Extreme Ausreißer abschneiden, damit die Verteilung sichtbar bleibt
     returns = returns.clip(
         lower=returns.quantile(0.01),
         upper=returns.quantile(0.99),
@@ -169,9 +202,10 @@ if "return_1m" in df.columns and df["return_1m"].notna().any():
     plt.grid(True)
     plt.tight_layout()
     fig3_path = output_dir / f"returns_hist_{start_date}_to_{end_date}.png"
-    plt.savefig(fig3_path, dpi=150)
+    fig3.savefig(fig3_path, dpi=150)
     plt.close(fig3)
 
+# Einzel-Tag-Plot
 sample_day = "2015-01-05"
 try:
     df_day = df.loc[sample_day]
@@ -196,12 +230,11 @@ else:
     plt.xticks(rotation=45)
     plt.tight_layout()
     fig_day_path = output_dir / f"close_day_{sample_day}.png"
-    plt.savefig(fig_day_path, dpi=150)
+    fig_day.savefig(fig_day_path, dpi=150)
     plt.close(fig_day)
 
 
-
-# 7) Einfache automatische Findings (Present findings)
+# 7) Einfache automatische Findings
 
 print("\n--- Einfache automatische Beobachtungen ---")
 
