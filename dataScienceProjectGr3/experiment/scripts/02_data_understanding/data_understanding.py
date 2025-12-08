@@ -23,11 +23,11 @@ except Exception:
 import matplotlib.pyplot as plt
 
 
-# Projekt-Root (`experiment`-Verzeichnis)
-project_root = Path(__file__).resolve().parents[2]
+# Projekt-Root (dataScienceProjectGr3 Verzeichnis)
+project_root = Path(__file__).resolve().parents[3]
 
-# 1) Konfiguration laden (relativ zum Skript / Projekt-Root)
-config_path = project_root / "conf" / "params.yaml"
+# 1) Konfiguration laden (relativ zum Projekt-Root)
+config_path = project_root / "experiment" / "conf" / "params.yaml"
 if not config_path.exists():
     raise FileNotFoundError(f"params.yaml nicht gefunden: {config_path.resolve()}")
 with config_path.open("r", encoding="utf-8") as f:
@@ -36,7 +36,11 @@ with config_path.open("r", encoding="utf-8") as f:
 # Basis-Datenpfad aus der YAML lesen; relativ zum Projekt-Root interpretieren, falls nicht absolut
 data_path = Path(params["DATA_ACQUISITION"]["DATA_PATH"])
 if not data_path.is_absolute():
-    data_path = project_root / data_path
+    # Pfad sollte relativ zum project_root sein, füge "experiment/" hinzu falls nicht vorhanden
+    if not str(data_path).startswith("experiment/"):
+        data_path = project_root / "experiment" / data_path
+    else:
+        data_path = project_root / data_path
 data_path = data_path.resolve()
 
 # robustes Auffinden der Parquet-Datei im Ordner Bars_1m_GRXEUR

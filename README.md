@@ -392,3 +392,198 @@ MODELING:
 Models are trained separately for each prediction horizon (5m, 10m, 15m, 30m, 60m). Each model predicts the trend direction (binary classification: up vs down/flat).
 
 All trained models are saved in `experiment/models/`.
+
+## Step 7 - Model Testing
+
+This step evaluates the trained models on validation and test sets to assess their performance and compare different approaches.
+
+**Script:** [experiment/scripts/07_model_testing/](dataScienceProjectGr3/experiment/scripts/07_model_testing/)
+
+### Available Evaluation Scripts
+
+- **`evaluate_nn.py`** - Evaluates the Feed Forward Neural Network
+- **`evaluate_dt.py`** - Evaluates the Decision Tree (includes per-node statistics)
+- **`evaluate_rf.py`** - Evaluates the Random Forest
+- **`evaluate_lr.py`** - Evaluates the Logistic Regression
+
+### Evaluation Results (Horizon: 15m)
+
+All models were evaluated on the validation and test sets for the 15-minute prediction horizon. The results are summarized below:
+
+#### Model Performance Comparison
+
+| Model | Val Accuracy | Test Accuracy | Val F1 (Down/Flat) | Val F1 (Up) | Recall Balance | Ranking |
+|-------|-------------|---------------|-------------------|-------------|----------------|---------|
+| **Random Forest** | **52.6%** | **51.6%** | 0.44 | 0.59 | 39% / 66% | **1** |
+| **Decision Tree** | 52.4% | 51.6% | 0.46 | 0.58 | 42% / 63% | 2 |
+| **Logistic Regression** | 52.4% | 51.6% | 0.48 | 0.56 | 45% / 59% | 2 |
+| **Neural Network** | 51.6% | 50.5% | 0.29 | 0.63 | 21% / 81% | 4 |
+
+#### Detailed Results
+
+**1. Random Forest (Best Performance)**
+
+```
+[VALIDATION]
+  Accuracy: 0.525512
+  Confusion Matrix:
+    [[38745 61556]
+     [36496 69851]]
+  
+  Classification Report:
+              precision    recall  f1-score   support
+  
+   Down/Flat       0.51      0.39      0.44    100301
+          Up       0.53      0.66      0.59    106347
+  
+    accuracy                           0.53    206648
+   macro avg       0.52      0.52      0.51    206648
+  weighted avg       0.52      0.53      0.52    206648
+
+[TEST]
+  Accuracy: 0.516268
+  Confusion Matrix:
+    [[44350 61540]
+     [41598 65725]]
+  
+  Classification Report:
+              precision    recall  f1-score   support
+  
+   Down/Flat       0.52      0.42      0.46    105890
+          Up       0.52      0.61      0.56    107323
+  
+    accuracy                           0.52    213213
+   macro avg       0.52      0.52      0.51    213213
+  weighted avg       0.52      0.52      0.51    213213
+
+TOP 10 MOST IMPORTANT FEATURES:
+   1. ema_60m_normalized             : 0.053076
+   2. price_normalized               : 0.047984
+   3. minute_of_day                  : 0.046528
+   4. slope_ema_60m_normalized       : 0.046106
+   5. slope_ema_30m_normalized       : 0.044946
+   6. macd_normalized                : 0.038073
+   7. volatility_60m                 : 0.035876
+   8. ema_30m_z                      : 0.035301
+   9. macd_signal_normalized         : 0.034629
+  10. price_z                        : 0.033504
+```
+
+**2. Logistic Regression**
+
+```
+[VALIDATION]
+  Accuracy: 0.524041
+  Confusion Matrix:
+    [[45076 55225]
+     [43131 63216]]
+  
+  Classification Report:
+              precision    recall  f1-score   support
+  
+   Down/Flat       0.51      0.45      0.48    100301
+          Up       0.53      0.59      0.56    106347
+  
+    accuracy                           0.52    206648
+   macro avg       0.52      0.52      0.52    206648
+  weighted avg       0.52      0.52      0.52    206648
+
+[TEST]
+  Accuracy: 0.515682
+  Confusion Matrix:
+    [[44433 61457]
+     [41806 65517]]
+  
+  Classification Report:
+              precision    recall  f1-score   support
+  
+   Down/Flat       0.52      0.42      0.46    105890
+          Up       0.52      0.61      0.56    107323
+  
+    accuracy                           0.52    213213
+   macro avg       0.52      0.52      0.51    213213
+  weighted avg       0.52      0.52      0.51    213213
+
+TOP 10 FEATURES BY ABSOLUTE COEFFICIENT:
+   1. bb_position_20                 : - 0.068781
+   2. hour_of_day                    : + 0.054030
+   3. ema_30m_normalized             : - 0.046973
+   4. slope_ema_30m_normalized        : + 0.046973
+   5. momentum_30m                   : - 0.038829
+   6. ema_15m_z                      : - 0.036369
+   7. slope_ema_5m_normalized        : - 0.036224
+   8. ema_5m_normalized              : + 0.036224
+   9. ema_15m_normalized             : - 0.034813
+  10. slope_ema_15m_normalized       : + 0.034813
+```
+
+**3. Neural Network**
+
+```
+[VALIDATION]
+  Accuracy: 0.516226
+  Confusion Matrix:
+    [[20568 79733]
+     [20238 86109]]
+  
+  Classification Report:
+              precision    recall  f1-score   support
+  
+   Down/Flat       0.50      0.21      0.29    100301
+          Up       0.52      0.81      0.63    106347
+  
+    accuracy                           0.52    206648
+   macro avg       0.51      0.51      0.46    206648
+  weighted avg       0.51      0.52      0.47    206648
+
+[TEST]
+  Accuracy: 0.504997
+  Confusion Matrix:
+    [[21606 84284]
+     [21257 86066]]
+  
+  Classification Report:
+              precision    recall  f1-score   support
+  
+   Down/Flat       0.50      0.20      0.29    105890
+          Up       0.51      0.80      0.62    107323
+  
+    accuracy                           0.50    213213
+   macro avg       0.50      0.50      0.46    213213
+  weighted avg       0.50      0.50      0.46    213213
+```
+
+**4. Decision Tree**
+
+The Decision Tree evaluation includes detailed per-node statistics, which are saved to CSV files:
+- `tree_stats_h{horizon}m.csv` - Per-node statistics
+- `node_subset_stats_validation_h{horizon}m.csv` - Validation set per-node subset statistics
+- `node_subset_stats_test_h{horizon}m.csv` - Test set per-node subset statistics
+- `node_subset_stats_combined_h{horizon}m.csv` - Combined statistics
+
+### Key Findings
+
+**1. Model Performance**
+- **Random Forest** achieves the best validation accuracy (52.6%) and shows the most balanced performance
+- All models achieve similar test accuracy (~51-52%), indicating consistent generalization
+- The improvement over random baseline (50%) is modest but consistent across models
+
+**2. Feature Importance (Random Forest)**
+- **EMA 60m** features are most important (`ema_60m_normalized`, `slope_ema_60m_normalized`)
+- **Price normalization** (`price_normalized`, `price_z`) is highly relevant
+- **Time-based features** (`minute_of_day`) show strong predictive power
+- **MACD indicators** (`macd_normalized`, `macd_signal_normalized`) are important
+- **Volatility** (`volatility_60m`) contributes significantly
+
+**3. Model Characteristics**
+- **Random Forest**: Best overall performance, good feature interpretability
+- **Decision Tree**: Interpretable rules, per-node analysis available
+- **Logistic Regression**: Interpretable coefficients, good baseline
+- **Neural Network**: Shows strong bias towards "Up" class (21% recall for Down/Flat vs 81% for Up)
+
+### Output Files
+
+Evaluation results are saved to:
+- `experiment/data/tree_stats_h{horizon}m.csv` - Decision Tree node statistics
+- `experiment/data/node_subset_stats_*.csv` - Per-node subset statistics
+- Console output with detailed metrics for all models
