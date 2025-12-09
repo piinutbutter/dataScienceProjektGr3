@@ -291,6 +291,13 @@ After this step, the data is:
 * saved in a compact and ML-ready format
 The dataset is now ready for model training and evaluation.
 
+**Summary:**
+* Converts the preprocessed train/validation/test splits into ML-ready NumPy arrays.
+* Loads a fixed feature list to ensure consistent feature selection and ordering.
+* Extracts the corresponding target columns for each prediction horizon (trend + direction).
+* Applies a separate shuffle within each split using a reproducible random seed.
+* Saves all arrays (X, y_dir, y_trend) as compressed .npz files for efficient loading in the modeling steps.
+
 ## Step 5 \- Feature Selection (Correlation Analysis)
 
 *Skript:* 
@@ -349,6 +356,16 @@ Trains a scikit-learn DecisionTreeClassifier.
 - `decision_tree_h{horizon}m.pkl` - Trained decision tree
 - `decision_tree_h{horizon}m_rules.txt` - Text representation of tree rules
 
+**Summary:**
+* Loads the .npz file (compressed NumPy data package).
+* Converts y_direction into a binary target (Up vs. Down/Flat).
+* Trains a DecisionTreeClassifier (scikit-learn classification model).
+* Computes accuracy (share of correctly classified samples).
+* Prints a classification report (metrics per class).
+* Saves the trained model using pickle (Python object serialization).
+* Exports the tree’s top-level rules as text for interpretability.
+
+
 **3. Random Forest** (`03_random_forest.py`)
 
 Trains a scikit-learn RandomForestClassifier (ensemble of decision trees).
@@ -357,6 +374,16 @@ Trains a scikit-learn RandomForestClassifier (ensemble of decision trees).
 - `random_forest_h{horizon}m.pkl` - Trained random forest
 - `random_forest_h{horizon}m_feature_importance.csv` - Feature importance ranking
 
+**Summary:**
+- Loads the ML-ready `.npz` file for a given prediction horizon.
+- Converts the multi-class direction label (-1/0/1) into a binary target (Up vs. Down/Flat).
+- Trains a `RandomForestClassifier` (ensemble of decision trees) with configurable hyperparameters.
+- Evaluates performance on train/validation/test splits (accuracy + classification report).
+- Computes and prints feature importance, highlighting the top 10 most important features.
+- Saves the trained model (including metrics and feature importance) as a `.pkl` file.
+- Exports the full feature importance table as a CSV file.
+
+
 **4. Logistic Regression** (`04_logistic_regression.py`)
 
 Trains a Logistic Regression baseline model.
@@ -364,6 +391,7 @@ Trains a Logistic Regression baseline model.
 **Output:**
 - `logistic_regression_h{horizon}m.pkl` - Trained logistic regression model
 - `logistic_regression_h{horizon}m_coefficients.csv` - Feature coefficients (interpretable)
+
 
 ### Configuration
 
@@ -468,6 +496,15 @@ TOP 10 MOST IMPORTANT FEATURES:
    9. macd_signal_normalized         : 0.034629
   10. price_z                        : 0.033504
 ```
+**Summary:**
+* Loads ML-ready validation and test data from the `.npz` file.
+* Loads the trained Random Forest model for the selected prediction horizon.
+* Converts the direction label into a binary target (Up vs. Down/Flat).
+* Computes overall performance metrics (accuracy, confusion matrix) for validation and test.
+* Prints detailed classification reports for both splits.
+* Prints the top 10 most important features based on the stored feature importance.
+
+
 
 **2. Logistic Regression**
 
@@ -587,3 +624,13 @@ Evaluation results are saved to:
 - `experiment/data/tree_stats_h{horizon}m.csv` - Decision Tree node statistics
 - `experiment/data/node_subset_stats_*.csv` - Per-node subset statistics
 - Console output with detailed metrics for all models
+
+**Summary:**
+* Loads ML-ready validation and test data from .npz.
+* Loads the trained Decision Tree model from the .pkl file.
+* Converts the direction target into a binary label (Up vs. Down/Flat).
+* Computes overall performance metrics (accuracy, confusion matrix, classification report).
+* Extracts per-node decision rules and applies them to validation and test samples.
+* Computes detailed node-level statistics (sample counts, mean targets, rule sets).
+* Saves all node statistics as CSV files for further inspection.
+* Provides both classical evaluation and interpretable rule-based model analysis.
