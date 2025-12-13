@@ -93,7 +93,11 @@ model_path = os.path.abspath(os.path.join(PROJECT_ROOT, os.path.normpath(model_p
 # Horizont für Modell (Standard: 15 Minuten)
 HORIZON = int(os.getenv("HORIZON", "15"))
 
+# Trading-Modus: 'live' (Alpaca), 'simulation' (nur Signale, kein Trading), oder 'backtest'
+TRADING_MODE = os.getenv("TRADING_MODE", "simulation").lower()
+
 # Alpaca Keys (Paper by default). Kann durch ALPACA_KEY_ID / ALPACA_SECRET env vars überschrieben werden.
+# Nur relevant wenn TRADING_MODE='live'
 ALPACA_KEY_ID = os.getenv("ALPACA_KEY_ID", keys["KEYS"].get("APCA-API-KEY-ID-Paper_v3") or keys["KEYS"].get("APCA-API-KEY-ID-Paper"))
 ALPACA_SECRET = os.getenv("ALPACA_SECRET", keys["KEYS"].get("APCA-API-SECRET-KEY-Paper_v3") or keys["KEYS"].get("APCA-API-SECRET-KEY-Paper"))
 ALPACA_BASE = os.getenv("ALPACA_BASE", "https://paper-api.alpaca.markets")
@@ -101,16 +105,23 @@ ALPACA_BASE = os.getenv("ALPACA_BASE", "https://paper-api.alpaca.markets")
 # Modell-Typ: 'decision_tree' oder 'random_forest'
 MODEL_TYPE = os.getenv("MODEL_TYPE", "decision_tree")
 
-# Ticker-Universum: env var TICKERS="^GDAXI" oder Standard
+# Ticker-Universum: env var TICKERS="GRXEUR" oder Standard
+# PROXY_TICKER: Falls GRXEUR verwendet wird, welcher Ticker bei Alpaca gehandelt werden soll
+# WICHTIG: Alpaca Paper Trading unterstützt hauptsächlich US-Märkte
+# Empfohlene Proxy-Ticker: EWG (iShares MSCI Germany ETF), oder US-Aktien wie AAPL, MSFT
 TICKERS_ENV = os.getenv("TICKERS")
+PROXY_TICKER = os.getenv("PROXY_TICKER", "EWG")  # iShares MSCI Germany ETF (US-Notiert, DAX-korreliert)
+
 if TICKERS_ENV:
     TICKERS = [t.strip().upper() for t in TICKERS_ENV.split(",") if t.strip()]
 else:
-    # Standard: ^GDAXI (DAX Index als Live-Alternative zu GRXEUR)
-    # Hinweis: GRXEUR ist historisch (2010-2018) und nicht bei yfinance verfügbar
-    TICKERS = ["^GDAXI"]
-    print(f"[init] Standard-Ticker: ^GDAXI (DAX Index)")
-    print(f"[init] Hinweis: GRXEUR ist nicht live verfügbar. Für GRXEUR verwende: export TICKERS='^GDAXI'")
+    # Standard: GRXEUR mit lokalem Datensatz
+    TICKERS = ["GRXEUR"]
+    print(f"[init] Standard-Ticker: GRXEUR (lokale historische Daten)")
+    print(f"[init] Proxy-Ticker für Trading: {PROXY_TICKER} (wird bei Alpaca gehandelt)")
+
+# Bestimme ob lokale Daten verwendet werden sollen (muss nach TICKERS definiert werden)
+USE_LOCAL_DATA = any(t.upper() == "GRXEUR" for t in TICKERS)
 
 # Device-Auswahl für Torch
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -233,6 +244,12 @@ print(f"[init] Model-Typ: {MODEL_TYPE}")
 print(f"[init] Features: {IN_DIM}")
 print(f"[init] Horizon: {HORIZON}m")
 print(f"[init] Ticker: {TICKERS}")
+print(f"[init] Trading-Modus: {TRADING_MODE}")
+if TRADING_MODE == "simulation":
+    print(f"[init] Simulation-Modus: Signale werden generiert, aber keine Orders platziert")
+elif TRADING_MODE == "live":
+    if not ALPACA_KEY_ID or not ALPACA_SECRET:
+        print(f"[WARN] Trading-Modus ist 'live', aber Alpaca-Keys fehlen!")
 
 # -----------------------------
 # Helfer: Alpaca RTH Kalender und Trading über REST
@@ -331,7 +348,14 @@ def get_filled_orders_for_symbol(symbol: str, limit: int = 50) -> List[dict]:
     return out
 
 def submit_market_order(symbol: str, side: str, qty: int = 1) -> dict | None:
-    """Gibt eine Market Order ab."""
+    """Gibt eine Market Order ab (oder simuliert im Simulation-Modus)."""
+    # Im Simulation-Modus keine echten Orders
+    if TRADING_MODE == "simulation":
+        order_id = f"SIM-{int(time.time())}"
+        print(f"[sim] {side.upper()} {qty} {symbol}: SIMULIERT (Order ID: {order_id})")
+        return {"id": order_id, "status": "simulated", "symbol": symbol, "side": side, "qty": qty}
+    
+    # Live Trading mit Alpaca
     url = f"{ALPACA_BASE}/v2/orders"
     payload = {
         "symbol": symbol,
@@ -346,12 +370,32 @@ def submit_market_order(symbol: str, side: str, qty: int = 1) -> dict | None:
         od = r.json()
         print(f"[order] {side.upper()} {qty} {symbol}: submitted id={od.get('id')}")
         return od
+    except requests.exceptions.HTTPError as e:
+        error_msg = str(e)
+        # Versuche mehr Details aus der Antwort zu bekommen
+        try:
+            if hasattr(e.response, 'json'):
+                error_details = e.response.json()
+                error_msg = f"{error_msg}: {error_details}"
+        except Exception:
+            pass
+        print(f"[order] {side.upper()} {symbol} fehlgeschlagen: {error_msg}")
+        if "422" in error_msg or "Unprocessable Entity" in error_msg:
+            print(f"[order] Hinweis: Symbol '{symbol}' ist möglicherweise bei Alpaca nicht handelbar.")
+            print(f"[order] Alpaca Paper Trading unterstützt hauptsächlich US-Märkte.")
+            print(f"[order] Versuche einen US-Proxy-Ticker: export PROXY_TICKER='EWG' (Germany ETF)")
+            print(f"[order] Oder US-Aktien: export PROXY_TICKER='AAPL' / 'MSFT' / 'GOOGL'")
+        return None
     except Exception as e:
         print(f"[order] {side.upper()} {symbol} fehlgeschlagen: {e}")
         return None
 
 def close_positions_older_than_30m():
     """Prüft offene Positionen und verkauft die, deren letzter BUY-Fill >= 30 Minuten her ist."""
+    if TRADING_MODE == "simulation":
+        print("[sim] Position-Management übersprungen (Simulation-Modus)")
+        return
+    
     try:
         positions = get_positions()
     except Exception as e:
@@ -418,8 +462,51 @@ def close_positions_older_than_30m():
                 print(f"[pos] Behalte {symbol}: letzter BUY-Fill bei {last_buy_fill}")
 
 # -----------------------------
-# Daten-Akquisition über yfinance
+# Daten-Akquisition: Lokale GRXEUR-Daten oder yfinance
 # -----------------------------
+def load_local_grxeur_data(days_hist: int = 5) -> pd.DataFrame | None:
+    """Lädt lokale GRXEUR-Daten aus Parquet-Dateien.
+    
+    Lädt die letzten `days_hist` Tage aus dem historischen Datensatz (2010-2018).
+    Da es historische Daten sind, werden die letzten verfügbaren Tage geladen.
+    """
+    grxeur_parquet = os.path.join(DATA_DIR, "raw", "Bars_1m_GRXEUR", "GRXEUR_M1_2010_2018.parquet")
+    
+    if not os.path.exists(grxeur_parquet):
+        print(f"[local] GRXEUR-Datei nicht gefunden: {grxeur_parquet}")
+        return None
+    
+    try:
+        print(f"[local] Lade lokale GRXEUR-Daten aus {grxeur_parquet}...")
+        df = pd.read_parquet(grxeur_parquet)
+        
+        # Stelle sicher, dass Index DatetimeIndex ist
+        if not isinstance(df.index, pd.DatetimeIndex):
+            if "timestamp" in df.columns:
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                df = df.set_index("timestamp").sort_index()
+            elif "datetime" in df.columns:
+                df["datetime"] = pd.to_datetime(df["datetime"])
+                df = df.set_index("datetime").sort_index()
+        
+        # Hole die letzten verfügbaren Tage
+        cutoff_date = df.index[-1] - pd.Timedelta(days=days_hist)
+        df_recent = df[df.index >= cutoff_date].copy()
+        
+        # Stelle sicher, dass Index tz-aware UTC ist (für Kompatibilität)
+        if df_recent.index.tz is None:
+            df_recent.index = df_recent.index.tz_localize("UTC")
+        
+        # Normalisiere Spaltennamen zu lowercase
+        df_recent.columns = df_recent.columns.str.lower()
+        
+        print(f"[local] GRXEUR: {len(df_recent)} Zeilen geladen (von {df_recent.index[0]} bis {df_recent.index[-1]})")
+        return df_recent
+        
+    except Exception as e:
+        print(f"[local] Fehler beim Laden von GRXEUR-Daten: {e}")
+        return None
+
 def download_minute_data(tickers: List[str], days_hist: int = 5) -> Dict[str, pd.DataFrame]:
     """Lädt 1m Bars für die letzten `days_hist` Tage für die gegebenen Ticker.
     
@@ -432,40 +519,23 @@ def download_minute_data(tickers: List[str], days_hist: int = 5) -> Dict[str, pd
     print(f"[yf] Lade {days_hist}d von 1m Daten für {len(tickers)} Ticker...")
     data: Dict[str, pd.DataFrame] = {}
     
-    # Alternative Ticker für GRXEUR (falls nicht verfügbar)
-    alternatives = {
-        "GRXEUR": ["^GDAXI", "EXS1.DE", "DAX"]  # DAX Index, DAX ETF, oder einfach DAX
-    }
-    
     # yfinance unterstützt Multi-Ticker-Download, aber zur Vermeidung von Rate-Limits iterieren wir
     for t in tickers:
+        # Prüfe ob lokale Daten verwendet werden sollen
+        if t.upper() == "GRXEUR" and USE_LOCAL_DATA:
+            df = load_local_grxeur_data(days_hist=days_hist)
+            if df is not None and not df.empty:
+                data[t] = df
+                continue
+            else:
+                print(f"[yf] {t}: Lokale Daten nicht verfügbar, versuche yfinance...")
+        
         try:
-            # Versuche zuerst den angegebenen Ticker
-            df = None
-            try:
-                df = yf.download(t, period=f"{days_hist}d", interval="1m", auto_adjust=True, prepost=True, progress=False)
-            except Exception as e1:
-                print(f"[yf] {t}: Fehler beim Download: {e1}")
-                
-                # Wenn GRXEUR fehlschlägt, schlage Alternativen vor
-                if t.upper() == "GRXEUR" and t in alternatives:
-                    print(f"[yf] {t}: Nicht verfügbar bei yfinance (historischer Datensatz 2010-2018).")
-                    print(f"[yf] {t}: Versuche alternative Ticker für Live-Trading: {alternatives[t]}")
-                    for alt_ticker in alternatives[t]:
-                        try:
-                            print(f"[yf] Versuche Alternative: {alt_ticker}")
-                            df = yf.download(alt_ticker, period=f"{days_hist}d", interval="1m", auto_adjust=True, prepost=True, progress=False)
-                            if df is not None and not df.empty:
-                                print(f"[yf] Erfolgreich geladen: {alt_ticker} (als Ersatz für {t})")
-                                t = alt_ticker  # Verwende den alternativen Ticker weiter
-                                break
-                        except Exception as e2:
-                            print(f"[yf] {alt_ticker} auch fehlgeschlagen: {e2}")
-                            continue
+            # Versuche yfinance Download
+            df = yf.download(t, period=f"{days_hist}d", interval="1m", auto_adjust=True, prepost=True, progress=False)
             
             if df is None or df.empty:
-                print(f"[yf] {t}: Keine Daten verfügbar. Hinweis: GRXEUR ist ein historischer Datensatz und nicht live verfügbar.")
-                print(f"[yf] {t}: Für Live-Trading verwende alternativen Ticker (z.B. export TICKERS='^GDAXI')")
+                print(f"[yf] {t}: Keine Daten verfügbar bei yfinance")
                 continue
             
             # Stelle sicher, dass Index tz-aware UTC ist
@@ -616,23 +686,54 @@ def main():
         if df is None or df.empty:
             continue
         
-        # Behalte nur Zeilen innerhalb RTH
-        if cal_map:
+        # Prüfe ob es historische Daten sind (älter als 1 Jahr)
+        is_historical = sym.upper() == "GRXEUR" or (df.index[-1] < datetime.now(timezone.utc) - timedelta(days=365))
+        
+        # Behalte nur Zeilen innerhalb RTH (nur für Live-Daten)
+        if cal_map and not is_historical:
             mask_rth = df.index.to_series().map(lambda ts: is_rth(ts, cal_map))
             df_rth = df.loc[mask_rth]
+            if df_rth.empty:
+                print(f"[eval] {sym}: keine RTH-Zeilen")
+                continue
         else:
-            df_rth = df.copy()
+            # Für historische Daten: Nutze alle Daten oder simuliere RTH (9:30-16:00 ET)
+            if is_historical:
+                print(f"[eval] {sym}: Historische Daten erkannt, verwende alle verfügbaren Zeilen")
+                # Optional: Filtere auf typische Handelszeiten (9:30-16:00 ET) auch für historische Daten
+                try:
+                    # Konvertiere zu Eastern Time für RTH-Filterung
+                    df_eastern = df.index.tz_convert(EASTERN) if df.index.tz else df.index.tz_localize("UTC").tz_convert(EASTERN)
+                    # Filtere auf 9:30-16:00 ET (ungefähr)
+                    hour_mask = (df_eastern.hour >= 9) & ((df_eastern.hour < 16) | ((df_eastern.hour == 16) & (df_eastern.minute == 0)))
+                    df_rth = df.loc[hour_mask]
+                    if df_rth.empty:
+                        print(f"[eval] {sym}: Keine Zeilen in typischen Handelszeiten (9:30-16:00 ET)")
+                        continue
+                except Exception as e:
+                    print(f"[eval] {sym}: Fehler bei RTH-Filterung für historische Daten: {e}, verwende alle Daten")
+                    df_rth = df.copy()
+            else:
+                df_rth = df.copy()
         
         if df_rth.empty:
-            print(f"[eval] {sym}: keine RTH-Zeilen")
+            print(f"[eval] {sym}: keine Daten nach Filterung")
             continue
         
-        # Wende 2-Tage-Entscheidungsfenster an
-        df_rth = df_rth[df_rth.index >= decision_cutoff_utc]
-        
-        if df_rth.empty:
-            print(f"[eval] {sym}: keine Zeilen innerhalb der letzten 2 Tage")
-            continue
+        # Wende 2-Tage-Entscheidungsfenster an (nur für Live-Daten)
+        if not is_historical:
+            df_rth = df_rth[df_rth.index >= decision_cutoff_utc]
+            if df_rth.empty:
+                print(f"[eval] {sym}: keine Zeilen innerhalb der letzten 2 Tage")
+                continue
+        else:
+            # Für historische Daten: Nutze die letzten verfügbaren Tage
+            hist_cutoff = df_rth.index[-1] - timedelta(days=2)
+            df_rth = df_rth[df_rth.index >= hist_cutoff]
+            if df_rth.empty:
+                print(f"[eval] {sym}: keine Zeilen in den letzten 2 verfügbaren Tagen")
+                continue
+            print(f"[eval] {sym}: Verwende historische Daten von {df_rth.index[0]} bis {df_rth.index[-1]}")
         
         # Berechne Features (nicht Embedding direkt)
         if df_rth is None or df_rth.empty:
@@ -703,8 +804,19 @@ def main():
         
         if should_buy_signal:
             print(f"[signal] {sym} @ {ts_str}: Vorhersage = 1 (aufwärts) -> BUY")
-            order = submit_market_order(sym, side="buy", qty=1)
-            actions.append((sym, ts_str, "BUY", order.get("id") if isinstance(order, dict) else None))
+            
+            # Im Simulation-Modus: Kein Proxy-Ticker nötig, da kein echtes Trading
+            if TRADING_MODE == "simulation":
+                trading_symbol = sym  # Verwende Original-Symbol
+                print(f"[signal] Simulation: BUY-Signal für {sym} (kein echtes Trading)")
+            else:
+                # Verwende Proxy-Ticker für Trading, wenn GRXEUR verwendet wird
+                trading_symbol = PROXY_TICKER if sym.upper() == "GRXEUR" else sym
+                if trading_symbol != sym:
+                    print(f"[signal] Verwende Proxy-Ticker {trading_symbol} für Trading (GRXEUR nicht handelbar bei Alpaca)")
+            
+            order = submit_market_order(trading_symbol, side="buy", qty=1)
+            actions.append((sym, ts_str, "BUY", order.get("id") if isinstance(order, dict) else None, trading_symbol))
         else:
             print(f"[signal] {sym} @ {ts_str}: Vorhersage = 0 (kein Signal)")
     
@@ -713,8 +825,16 @@ def main():
     
     print("[done] Aktionen:")
     if actions:
-        for sym, ts, action, order_id in actions:
-            print(f"  {action} {sym} @ {ts} (Order ID: {order_id if order_id else 'N/A'})")
+        for action_item in actions:
+            if len(action_item) == 5:  # Mit Proxy-Ticker
+                sym, ts, action, order_id, trading_sym = action_item
+                if trading_sym != sym:
+                    print(f"  {action} {sym} @ {ts} -> Trading: {trading_sym} (Order ID: {order_id if order_id else 'N/A'})")
+                else:
+                    print(f"  {action} {sym} @ {ts} (Order ID: {order_id if order_id else 'N/A'})")
+            else:  # Alte Format
+                sym, ts, action, order_id = action_item[:4]
+                print(f"  {action} {sym} @ {ts} (Order ID: {order_id if order_id else 'N/A'})")
     else:
         print("  Keine Aktionen")
 
