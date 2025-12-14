@@ -634,3 +634,98 @@ Evaluation results are saved to:
 * Computes detailed node-level statistics (sample counts, mean targets, rule sets).
 * Saves all node statistics as CSV files for further inspection.
 * Provides both classical evaluation and interpretable rule-based model analysis.
+
+## Step 8 - Deployment
+
+This step evaluates the trained models in realistic trading scenarios through backtesting and paper trading simulations.
+
+**Scripts:**
+- [backtest.py](dataScienceProjectGr3/experiment/scripts/08_deployment/backtest.py) - Historical backtesting on GRXEUR data (2010-2018)
+- [paper_trading_analysis.py](dataScienceProjectGr3/experiment/scripts/08_deployment/paper_trading_analysis.py) - Paper trading with live data from Yahoo Finance
+
+### 1. Backtesting Trading Algorithms
+
+**Deriving Trading Algorithms from Trained Models**
+
+The trading strategy is derived directly from the trained Decision Tree or Random Forest classifier:
+- The model predicts trend direction (1 = upward, 0 = downward/flat) based on technical features
+- **Entry Signal**: When model prediction = 1 (upward trend expected)
+- **Exit Signal**: After a fixed holding period (default: 30 minutes)
+
+The same feature engineering pipeline from training is applied to historical data, ensuring consistency between training and deployment.
+
+**Entry and Exit Points**
+
+- **Entry**: Triggered when the model predicts an upward trend (class 1)
+- **Exit**: Position is closed after 30 minutes (configurable)
+- **Position Size**: 10% of available capital per trade (configurable)
+- **No Stop-Loss/Take-Profit**: Pure time-based exit for simplicity
+
+**Historical Performance**
+
+The backtest evaluates performance on historical GRXEUR data (2010-2018):
+- Calculates total return, win rate, Sharpe ratio
+- Tracks all trades with entry/exit times and profits
+- Compares strategy performance against buy-and-hold baseline
+
+**Output Files**
+
+Performance metrics are printed to console and saved to:
+- `experiment/plots/backtest_h{horizon}m/backtest_results_h{horizon}m.csv` - All positions with details
+- `experiment/plots/backtest_h{horizon}m/01_trading_signals_h{horizon}m.png` - Trading signals over time
+- `experiment/plots/backtest_h{horizon}m/02_equity_curve_h{horizon}m.png` - Portfolio value over time
+- `experiment/plots/backtest_h{horizon}m/03_trading_distribution_h{horizon}m.png` - Distribution of trades per day/hour
+- `experiment/plots/backtest_h{horizon}m/04_profit_distribution_h{horizon}m.png` - Profit distribution and win/loss ratio
+- `experiment/plots/backtest_h{horizon}m/05_market_comparison_h{horizon}m.png` - Strategy vs. Buy & Hold comparison
+
+### 2. Paper Trading
+
+**Setup**
+
+Paper trading uses live market data from Yahoo Finance (e.g., ^GDAXI as proxy for GRXEUR) to simulate trading without real orders:
+- Loads the last 7 days of 1-minute bars from Yahoo Finance
+- Applies the same feature engineering and model prediction pipeline
+- Simulates trades with the same entry/exit rules as backtesting
+- **No real orders**: Pure simulation for academic purposes
+
+**Performance Analysis**
+
+The paper trading analysis provides:
+- **Overall Performance**: Total return, win rate, Sharpe ratio, number of trades
+- **Timeframe Analysis**: Daily, weekly, and monthly performance breakdowns
+- **Individual Symbol Analysis**: If multiple tickers are used, performance per symbol
+- **Comparison with Backtest**: Side-by-side comparison of paper trading vs. historical backtest results
+
+**Time Frames**
+
+Performance is analyzed across multiple timeframes:
+- **Daily**: Cumulative profit per day
+- **Weekly**: Profit per week
+- **Monthly**: Profit per month
+
+This allows identification of periods with strong or weak performance.
+
+**Comparison with Backtest Results**
+
+The script automatically compares paper trading results with backtest results if available:
+- Compares key metrics (return, win rate, Sharpe ratio, number of trades)
+- Visualizes equity curves side-by-side
+- Highlights differences that may indicate:
+  - Model robustness (similar performance)
+  - Overfitting (backtest much better than paper trading)
+  - Market regime changes (different market conditions)
+
+**Output Files**
+
+Results are saved to:
+- `experiment/plots/paper_trading_h{horizon}m/{TICKER}/paper_trading_results_{TICKER}_h{horizon}m.csv` - All positions
+- `experiment/plots/paper_trading_h{horizon}m/{TICKER}/01_performance_comparison.png` - Paper trading vs. Backtest
+- `experiment/plots/paper_trading_h{horizon}m/{TICKER}/02_timeframe_performance.png` - Performance over timeframes
+- `experiment/plots/paper_trading_h{horizon}m/{TICKER}/03_equity_comparison.png` - Equity curve comparison
+
+**Important Notes**
+
+- **Pure Simulation**: No real money, no real orders, no trading fees
+- **Data Source**: Yahoo Finance (may have rate limits, data quality depends on provider)
+- **Proxy Ticker**: GRXEUR is historical data (2010-2018), so ^GDAXI (DAX Index) is used as a similar proxy for live data
+- **Academic Purpose**: All simulations are for educational/research purposes only
