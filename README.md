@@ -387,6 +387,99 @@ MODELING:
   RANDOM_STATE: 42
 ```
 
+### Model Parameters (Detailed)
+
+#### Neural Network Parameters
+
+| Parameter | Wert | Beschreibung | Begründung |
+|-----------|------|--------------|------------|
+| **Hidden Layer 1** | 128 Neuronen | Größe erste versteckte Schicht | Balance zwischen Kapazität und Overfitting |
+| **Hidden Layer 2** | 64 Neuronen | Größe zweite versteckte Schicht | Progressive Dimensionsreduktion |
+| **Dropout** | 0.1 (10%) | Dropout-Wahrscheinlichkeit | Verhindert Overfitting ohne Underfitting |
+| **Learning Rate** | 0.001 | Lernrate AdamW Optimizer | Standard-Startwert, stabile Konvergenz |
+| **Weight Decay** | 0.0001 | L2-Regularisierungsstärke | Leichte Regularisierung |
+| **Batch Size** | 2048 | Samples pro Batch | Große Batches für stabile Gradienten |
+| **Epochs** | 25 | Maximale Trainingsepochen | Ausreichend für Konvergenz |
+| **Patience** | 5 | Early Stopping Geduld | Verhindert Overfitting |
+| **Loss Function** | MSE | Mean Squared Error | Regression auf kontinuierlichen Trend-Slope |
+| **Optimizer** | AdamW | Adaptive Moment Estimation | Effiziente Gradientenabstiegsmethode |
+
+**Architektur:**
+
+```
+Input Layer:          44 Features
+        ↓
+    [Linear Layer]
+    44 → 128 Neuronen
+        ↓
+    [ReLU Aktivierung]
+        ↓
+    [Dropout (10%)]
+        ↓
+    [Linear Layer]
+    128 → 64 Neuronen
+        ↓
+    [ReLU Aktivierung]
+        ↓
+    [Dropout (10%)]
+        ↓
+    [Linear Layer]
+    64 → 1 Neuron
+        ↓
+    Output: Kontinuierlicher Wert (Trend-Slope)
+```
+
+**Schicht-Details:**
+
+| Schicht | Typ | Input Größe | Output Größe | Parameter |
+|---------|-----|------------|--------------|-----------|
+| 1 | Linear + ReLU + Dropout | 44 | 128 | 5.760 Gewichte + 128 Biases |
+| 2 | Linear + ReLU + Dropout | 128 | 64 | 8.192 Gewichte + 64 Biases |
+| 3 | Linear | 64 | 1 | 64 Gewichte + 1 Bias |
+| **Gesamt** | | | | **~14.000 trainierbare Parameter** |
+
+**Aktivierungsfunktionen:**
+- **ReLU (Rectified Linear Unit):** `f(x) = max(0, x)` - führt Nicht-Linearität ein
+- **Keine Aktivierung am Output:** Direkter Regressions-Output (kontinuierlicher Wert)
+
+**Regularisierungstechniken:**
+- **Dropout (p=0.1):** Setzt während des Trainings zufällig 10% der Neuronen auf 0, um Overfitting zu vermeiden
+- **Weight Decay (λ=0.0001):** L2-Regularisierung auf Gewichte
+- **Early Stopping:** Überwacht Validation Loss, stoppt bei fehlender Verbesserung für 5 Epochen
+
+#### Logistic Regression Parameters
+
+| Parameter | Wert | Beschreibung | Begründung |
+|-----------|------|--------------|------------|
+| **C** | 1.0 | Inverse Regularisierungsstärke | Standardwert, moderate Regularisierung |
+| **Max Iterations** | 1000 | Maximale Solver-Iterationen | Sichert Konvergenz |
+| **Solver** | 'lbfgs' | Optimierungsalgorithmus | Gut für kleine-mittlere Datensätze |
+| **Random State** | 42 | Zufallsseed | Reproduzierbarkeit |
+| **n_jobs** | -1 | Parallele Verarbeitung | Nutzt alle CPU-Kerne |
+| **Feature Scaling** | StandardScaler | Normalisierung (μ=0, σ=1) | Erforderlich für Konvergenz |
+
+#### Decision Tree Parameters
+
+| Parameter | Wert | Beschreibung |
+|-----------|------|--------------|
+| **Max Depth** | 8 | Maximale Tiefe des Baums |
+| **Min Samples Split** | 2 | Minimale Samples für Split |
+| **Min Samples Leaf** | 1 | Minimale Samples pro Blatt |
+| **Random State** | 42 | Zufallsseed für Reproduzierbarkeit |
+
+#### Random Forest Parameters
+
+| Parameter | Wert | Beschreibung |
+|-----------|------|--------------|
+| **N Estimators** | 100 | Anzahl der Bäume im Ensemble |
+| **Max Depth** | 10 | Maximale Tiefe jedes Baums |
+| **Min Samples Split** | 2 | Minimale Samples für Split |
+| **Min Samples Leaf** | 1 | Minimale Samples pro Blatt |
+| **Random State** | 42 | Zufallsseed für Reproduzierbarkeit |
+| **n_jobs** | -1 | Parallele Verarbeitung (alle CPU-Kerne) |
+
+**Hinweis:** Hyperparameter-Tuning (Grid Search, Random Search) wurde aufgrund von Rechenbeschränkungen nicht durchgeführt. Die Parameter basieren auf Best Practices und Standardwerten.
+
 ### Workflow
 
 Models are trained separately for each prediction horizon (5m, 10m, 15m, 30m, 60m). Each model predicts the trend direction (binary classification: up vs down/flat).
@@ -560,6 +653,20 @@ The Decision Tree evaluation includes detailed per-node statistics, which are sa
 - `node_subset_stats_validation_h{horizon}m.csv` - Validation set per-node subset statistics
 - `node_subset_stats_test_h{horizon}m.csv` - Test set per-node subset statistics
 - `node_subset_stats_combined_h{horizon}m.csv` - Combined statistics
+
+### Baseline
+
+**Random Baseline:** Zufälliges Raten der Klassen (erwartete Accuracy: 50%)
+
+**Verbesserung gegenüber Baseline:**
+
+| Modell | Validation Accuracy | Verbesserung |
+|--------|-------------------|--------------|
+| **Random Baseline** | ~50.3% | - |
+| Neural Network | 51.6% | +1.3% |
+| Logistic Regression | 52.4% | +2.1% |
+| Decision Tree | 52.4% | +2.1% |
+| Random Forest | 52.6% | +2.3% |
 
 ### Key Findings
 
