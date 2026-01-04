@@ -233,6 +233,8 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
         sys.stdout = old_stdout
     
     # Feature-Frame bauen
+    # WICHTIG: df_feat hat einen Integer-Index, nicht einen DatetimeIndex
+    # Wir müssen die Features mit den richtigen Timestamps vom ursprünglichen DataFrame verknüpfen
     X = pd.DataFrame(index=df_feat.index)
     for col in FEATURES:
         if col in df_feat.columns:
@@ -245,14 +247,17 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
     if X.empty:
         return pd.DataFrame()
     
-    # Merge Features mit Preisen, um sicherzustellen, dass Indizes übereinstimmen
-    # Verwende merge_asof für bessere Synchronisation
-    X_reset = X.reset_index()
-    # Stelle sicher, dass die erste Spalte "timestamp" heißt und datetime ist
-    if X_reset.columns[0] != "timestamp":
-        X_reset = X_reset.rename(columns={X_reset.columns[0]: "timestamp"})
+    # Merge Features mit Preisen - verwende die Timestamps vom ursprünglichen DataFrame
+    # df_feat hat denselben Index wie df_features_input (mit DatetimeIndex)
+    # Aber generate_features gibt einen DataFrame mit Integer-Index zurück
+    # Wir müssen die Timestamps vom ursprünglichen df verwenden
     
-    # Konvertiere zu datetime und stelle sicher, dass Timezone konsistent ist
+    # Lösungsansatz: Verwende df.index direkt, da df_features_input dasselbe ist wie df[["close", "open", "high", "low"]]
+    # df_features_input hat den gleichen Index wie df
+    X_reset = X.reset_index(drop=True)  # Reset zu Integer-Index
+    X_reset["timestamp"] = df.index[:len(X_reset)]  # Verwende Timestamps vom ursprünglichen DataFrame
+    
+    # Stelle sicher, dass Timezone konsistent ist
     X_reset["timestamp"] = pd.to_datetime(X_reset["timestamp"])
     if X_reset["timestamp"].dt.tz is None:
         # Wenn naive, konvertiere zu UTC (wie df)
@@ -308,20 +313,16 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
         })
     
     results_df = pd.DataFrame(results)
+    
     if not results_df.empty:
+        # Stelle sicher, dass timestamp als datetime behandelt wird
+        if not pd.api.types.is_datetime64_any_dtype(results_df["timestamp"]):
+            results_df["timestamp"] = pd.to_datetime(results_df["timestamp"])
         results_df = results_df.set_index("timestamp").sort_index()
     
     num_signals = results_df["signal"].sum() if not results_df.empty else 0
-    num_no_signals = len(results_df) - num_signals if not results_df.empty else 0
     
-    # Debug: Signal-Statistik für besseres Verständnis
     print(f"[features] {len(results_df)} Zeilen verarbeitet, {num_signals} BUY-Signale gefunden")
-    if not results_df.empty:
-        signal_changes = (results_df["signal"].diff() != 0).sum()
-        print(f"[debug] Signal-Statistik:")
-        print(f"  BUY-Signale (signal=1): {num_signals} ({num_signals/len(results_df)*100:.1f}%)")
-        print(f"  Keine Signale (signal=0): {num_no_signals} ({num_no_signals/len(results_df)*100:.1f}%)")
-        print(f"  Signal-Wechsel: {signal_changes} (wichtig für Trade-Häufigkeit)")
     
     return results_df
 
@@ -355,13 +356,35 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
     # Merge Signale mit Preisen
     # WICHTIG: Wir iterieren über ALLE Preis-Datenpunkte (nicht nur Signal-Zeitpunkte)
     # damit Positions-Exits auch zwischen Signalen funktionieren
-    signals_reset = signals[["signal", "prediction"]].reset_index()
-    prices_reset = prices[["close"]].reset_index()
     
-    if signals_reset.columns[0] != "timestamp":
-        signals_reset = signals_reset.rename(columns={signals_reset.columns[0]: "timestamp"})
+    # Stelle sicher, dass signals einen Index hat (nicht bereits reset)
+    if isinstance(signals.index, pd.DatetimeIndex):
+        signals_reset = signals[["signal", "prediction"]].reset_index()
+        # Benenne Index-Spalte um, falls nötig
+        if signals_reset.columns[0] != "timestamp":
+            signals_reset = signals_reset.rename(columns={signals_reset.columns[0]: "timestamp"})
+    else:
+        # Falls bereits reset, sollte timestamp Spalte vorhanden sein
+        signals_reset = signals[["signal", "prediction", "timestamp"]].copy() if "timestamp" in signals.columns else signals[["signal", "prediction"]].copy()
+        if "timestamp" not in signals_reset.columns:
+            raise ValueError("Signals DataFrame muss 'timestamp' als Index oder Spalte haben")
+    
+    prices_reset = prices[["close"]].reset_index()
     if prices_reset.columns[0] != "timestamp":
         prices_reset = prices_reset.rename(columns={prices_reset.columns[0]: "timestamp"})
+    
+    # Stelle sicher, dass timestamp Spalten datetime sind
+    signals_reset["timestamp"] = pd.to_datetime(signals_reset["timestamp"])
+    if signals_reset["timestamp"].dt.tz is None:
+        signals_reset["timestamp"] = signals_reset["timestamp"].dt.tz_localize("UTC")
+    else:
+        signals_reset["timestamp"] = signals_reset["timestamp"].dt.tz_convert("UTC")
+    
+    prices_reset["timestamp"] = pd.to_datetime(prices_reset["timestamp"])
+    if prices_reset["timestamp"].dt.tz is None:
+        prices_reset["timestamp"] = prices_reset["timestamp"].dt.tz_localize("UTC")
+    else:
+        prices_reset["timestamp"] = prices_reset["timestamp"].dt.tz_convert("UTC")
     
     # Sortiere beide DataFrames für merge_asof
     signals_reset = signals_reset.sort_values("timestamp")
@@ -376,15 +399,9 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
         direction="backward"
     ).set_index("timestamp")
     
-    # Debug: Zeige Statistiken vor fillna
-    signals_available_before = combined["signal"].notna().sum()
-    
     # Fülle fehlende Signale (am Anfang, bevor erste Signale verfügbar sind)
     combined["signal"] = combined["signal"].fillna(0).astype(int)
     combined["prediction"] = combined["prediction"].fillna(0).astype(int)
-    
-    print(f"[debug] Kombinierte Daten: {len(combined)} Zeilen (alle Preis-Datenpunkte)")
-    print(f"[debug] Signale ursprünglich verfügbar für {signals_available_before} Zeilen (vor fillna)")
     
     previous_date = None
     for idx, (timestamp, row) in enumerate(combined.iterrows()):
@@ -498,47 +515,6 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
         })
     
     positions_df = pd.DataFrame(positions)
-    
-    # Debug: Trade-Statistik
-    if not positions_df.empty:
-        exit_reasons = positions_df["exit_reason"].value_counts()
-        print(f"[debug] Trade-Statistik:")
-        print(f"  Gesamt-Trades: {len(positions_df)}")
-        print(f"  Exit-Gründe:")
-        for reason, count in exit_reasons.items():
-            print(f"    {reason}: {count} ({count/len(positions_df)*100:.1f}%)")
-        
-        # Detaillierte Haltedauer-Statistik
-        avg_hold_time = positions_df["hold_time_minutes"].mean()
-        median_hold_time = positions_df["hold_time_minutes"].median()
-        min_hold_time = positions_df["hold_time_minutes"].min()
-        max_hold_time = positions_df["hold_time_minutes"].max()
-        
-        print(f"  Haltedauer-Statistik:")
-        print(f"    Durchschnitt: {avg_hold_time:.1f} Minuten")
-        print(f"    Median: {median_hold_time:.1f} Minuten")
-        print(f"    Min: {min_hold_time:.1f} Minuten")
-        print(f"    Max: {max_hold_time:.1f} Minuten")
-        
-        # Haltedauer nach Exit-Grund
-        for reason in exit_reasons.index:
-            reason_trades = positions_df[positions_df["exit_reason"] == reason]
-            if not reason_trades.empty:
-                avg_time_for_reason = reason_trades["hold_time_minutes"].mean()
-                print(f"    {reason}: {avg_time_for_reason:.1f} Min (Ø)")
-        
-        # Warnung, wenn durchschnittliche Haltedauer deutlich höher ist als Exit-Zeit
-        if avg_hold_time > exit_minutes * 2:
-            print(f"  ⚠️  WARNUNG: Durchschnittliche Haltedauer ({avg_hold_time:.1f} Min) ist deutlich höher")
-            print(f"     als Exit-Zeit ({exit_minutes} Min). Mögliche Ursachen:")
-            print(f"     - Ausreißer durch 'end_of_data' Trade")
-            print(f"     - Lücken in den Daten")
-            print(f"     - Berechnungsproblem")
-    else:
-        print(f"[debug] WARNUNG: Keine Trades ausgeführt!")
-        print(f"[debug] Mögliche Gründe:")
-        print(f"  - Signale waren kontinuierlich aktiv (keine Signalwechsel)")
-        print(f"  - Erste Position wurde nie geschlossen (end_of_data)")
     
     # Performance-Metriken
     if not positions_df.empty:
