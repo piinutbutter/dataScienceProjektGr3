@@ -66,6 +66,8 @@ model_path_cfg = params["MODELING"].get("MODEL_PATH", "experiment/models")
 model_path = os.path.abspath(os.path.join(PROJECT_ROOT, os.path.normpath(model_path_cfg)))
 HORIZON = int(os.getenv("HORIZON", "15"))
 MODEL_TYPE = os.getenv("MODEL_TYPE", "decision_tree")
+# Anzahl Tage für Backtesting (Standard: 180 Tage = 6 Monate)
+BACKTEST_DAYS = int(os.getenv("BACKTEST_DAYS", "180"))
 
 # Lade Features
 FEATURES: List[str] = []
@@ -140,8 +142,12 @@ print(f"[init] {MODEL_TYPE} geladen: {tree_path}")
 # -----------------------------
 # Daten-Laden
 # -----------------------------
-def load_historical_data() -> pd.DataFrame:
-    """Lädt historische GRXEUR-Daten."""
+def load_historical_data(days: int = 180) -> pd.DataFrame:
+    """Lädt historische GRXEUR-Daten.
+    
+    Args:
+        days: Anzahl der letzten Tage, die verwendet werden sollen (Standard: 180 Tage = 6 Monate)
+    """
     grxeur_path = os.path.join(DATA_DIR, "raw", "Bars_1m_GRXEUR", "GRXEUR_M1_2010_2018.parquet")
     if not os.path.exists(grxeur_path):
         raise FileNotFoundError(f"GRXEUR-Daten nicht gefunden: {grxeur_path}")
@@ -161,7 +167,17 @@ def load_historical_data() -> pd.DataFrame:
         df.index = df.index.tz_localize("UTC")
     
     df.columns = df.columns.str.lower()
-    print(f"[data] {len(df)} Zeilen geladen: {df.index[0]} bis {df.index[-1]}")
+    
+    # Filtere auf die letzten N Tage für Vergleichbarkeit mit Paper Trading
+    if days > 0:
+        end_date = df.index[-1]
+        start_date = end_date - pd.Timedelta(days=days)
+        df_filtered = df[df.index >= start_date].copy()
+        print(f"[data] Gefiltert auf letzte {days} Tage: {len(df_filtered)} Zeilen ({df_filtered.index[0]} bis {df_filtered.index[-1]})")
+        print(f"[data] Original: {len(df)} Zeilen ({df.index[0]} bis {df.index[-1]})")
+        df = df_filtered
+    else:
+        print(f"[data] {len(df)} Zeilen geladen: {df.index[0]} bis {df.index[-1]}")
     
     return df
 
@@ -609,9 +625,10 @@ def main():
     print("=" * 80)
     print("GRXEUR Trend Prediction - Backtesting")
     print("=" * 80)
+    print(f"[config] Backtest-Zeitraum: Letzte {BACKTEST_DAYS} Tage ({BACKTEST_DAYS/30:.1f} Monate)")
     
-    # Lade Daten
-    df = load_historical_data()
+    # Lade Daten (gefiltert auf letzte N Tage)
+    df = load_historical_data(days=BACKTEST_DAYS)
     
     # Berechne Features und Signale
     signals = compute_features_and_predictions(df, step_size=60)  # Jede Stunde evaluieren

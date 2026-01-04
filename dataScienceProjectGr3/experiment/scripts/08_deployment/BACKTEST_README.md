@@ -6,6 +6,7 @@ Dieses Skript führt ein vollständiges Backtesting der Trading-Strategie auf hi
 
 Das Backtesting-Skript:
 - ✅ Lädt historische GRXEUR-Daten (2010-2018)
+- ✅ Filtert auf die letzten N Tage (Standard: 180 Tage = 6 Monate für robuste Validierung)
 - ✅ Generiert Trading-Signale basierend auf dem trainierten Modell
 - ✅ Simuliert Trading mit Entry/Exit-Regeln
 - ✅ Berechnet Performance-Metriken
@@ -28,6 +29,7 @@ python experiment/scripts/08_deployment/backtest.py
 ```bash
 export HORIZON=15        # Prediction Horizon (Standard: 15)
 export MODEL_TYPE="decision_tree"  # oder "random_forest"
+export BACKTEST_DAYS=180  # Anzahl Tage für Backtesting (Standard: 180 Tage = 6 Monate)
 python experiment/scripts/08_deployment/backtest.py
 ```
 
@@ -134,11 +136,22 @@ Sharpe Ratio:          0.85
 ================================================================================
 ```
 
+## Backtesting-Zeitraum
+
+Der Standard von **180 Tagen (6 Monate)** entspricht den Best Practices für kurzfristige Daytrading-Strategien:
+- ✅ Deckt verschiedene Marktbedingungen ab (Bull/Bear Markets, Volatilität)
+- ✅ Reduziert Overfitting-Risiko
+- ✅ Besser für Produktionseinsatz geeignet
+- ✅ Empfohlen für robuste Strategie-Validierung
+
+Der Zeitraum kann über die Umgebungsvariable `BACKTEST_DAYS` angepasst werden.
+
 ## Nächste Schritte
 
 1. **Parameter-Optimierung**: Teste verschiedene Exit-Zeiten, Entry-Delays
 2. **Risk Management**: Füge Stop-Loss / Take-Profit hinzu
 3. **Weitere Metriken**: Max Drawdown, Sortino Ratio, etc.
 4. **Vergleich**: Teste verschiedene Modelle (Decision Tree vs. Random Forest)
+5. **Zeitraum-Anpassung**: Passe `BACKTEST_DAYS` an, um verschiedene Zeiträume zu testen
 
 
