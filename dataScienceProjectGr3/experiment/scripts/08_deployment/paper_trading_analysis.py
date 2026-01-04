@@ -682,10 +682,55 @@ def load_backtest_results() -> Dict | None:
     return None
 
 # -----------------------------
+# Buy & Hold Berechnung
+# -----------------------------
+def calculate_buy_and_hold(prices: pd.DataFrame, initial_capital: float = 10000.0) -> Dict:
+    """Berechnet Buy & Hold Performance.
+    
+    Args:
+        prices: DataFrame mit 'close' Spalte und DatetimeIndex
+        initial_capital: Initiales Kapital
+    
+    Returns:
+        Dict mit Buy & Hold Metriken
+    """
+    if prices.empty or "close" not in prices.columns:
+        return {
+            "initial_capital": initial_capital,
+            "final_capital": initial_capital,
+            "total_return_pct": 0.0,
+            "equity_curve": pd.DataFrame(),
+        }
+    
+    # Berechne Buy & Hold Performance
+    first_price = prices["close"].iloc[0]
+    last_price = prices["close"].iloc[-1]
+    
+    # Anzahl Aktien die man kaufen könnte
+    shares = initial_capital / first_price
+    final_capital = shares * last_price
+    total_return_pct = ((final_capital - initial_capital) / initial_capital) * 100
+    
+    # Equity Curve über Zeit
+    equity_curve = (prices["close"] / first_price) * initial_capital
+    equity_curve_df = pd.DataFrame({
+        "timestamp": equity_curve.index,
+        "equity": equity_curve.values
+    }).set_index("timestamp")
+    
+    return {
+        "initial_capital": initial_capital,
+        "final_capital": final_capital,
+        "total_return_pct": total_return_pct,
+        "equity_curve": equity_curve_df,
+    }
+
+# -----------------------------
 # Visualisierungen
 # -----------------------------
 def create_analysis_plots(paper_results: Dict, timeframes: Dict, 
-                         backtest_results: Dict | None, output_dir: str):
+                         backtest_results: Dict | None, output_dir: str,
+                         prices: pd.DataFrame | None = None):
     """Erstellt umfassende Analyse-Plots."""
     os.makedirs(output_dir, exist_ok=True)
     print(f"[plots] Erstelle Analyse-Plots...")
@@ -757,28 +802,99 @@ def create_analysis_plots(paper_results: Dict, timeframes: Dict,
     # (Wird nur relevant wenn mehrere Ticker verwendet werden)
     
     # 4. Equity Curve Vergleich
-    if backtest_results and not positions_df.empty:
+    if not positions_df.empty:
         fig, ax = plt.subplots(figsize=(16, 8))
         
         # Paper Trading Equity Curve
-        positions_df = positions_df.sort_values("exit_time")
+        positions_df_sorted = positions_df.sort_values("exit_time")
         paper_equity = [paper_results["initial_capital"]]
-        for profit in positions_df["profit"]:
-            paper_equity.append(paper_equity[-1] + profit)
+        paper_timestamps = []
+        if prices is not None and not prices.empty:
+            paper_timestamps.append(prices.index[0])
+        else:
+            paper_timestamps.append(positions_df_sorted["entry_time"].iloc[0])
+        
+        for _, pos in positions_df_sorted.iterrows():
+            paper_equity.append(paper_equity[-1] + pos["profit"])
+            paper_timestamps.append(pos["exit_time"])
         
         paper_equity_normalized = [(e / paper_results["initial_capital"]) * 100 for e in paper_equity]
         
+        # Buy & Hold Equity Curve (wenn Preisdaten verfügbar)
+        if prices is not None and not prices.empty:
+            buy_hold = calculate_buy_and_hold(prices, paper_results["initial_capital"])
+            if not buy_hold["equity_curve"].empty:
+                # Interpoliere Buy & Hold auf Paper Trading Zeitpunkte
+                bh_curve = buy_hold["equity_curve"]
+                bh_values_at_trades = []
+                for ts in paper_timestamps:
+                    # Finde den nächsten Wert in der Buy & Hold Curve
+                    if ts in bh_curve.index:
+                        bh_val = bh_curve.loc[ts, "equity"]
+                    else:
+                        # Finde den nächsten verfügbaren Wert
+                        before = bh_curve[bh_curve.index <= ts]
+                        if not before.empty:
+                            bh_val = before.iloc[-1]["equity"]
+                        else:
+                            bh_val = buy_hold["initial_capital"]
+                    bh_values_at_trades.append((bh_val / buy_hold["initial_capital"]) * 100)
+                
+                ax.plot(range(len(bh_values_at_trades)), bh_values_at_trades,
+                       label=f"Buy & Hold ({buy_hold['total_return_pct']:.2f}%)",
+                       linewidth=2, color="blue", linestyle="--", alpha=0.7)
+        
         ax.plot(range(len(paper_equity_normalized)), paper_equity_normalized, 
-               label="Paper Trading (Live)", linewidth=2)
-        ax.axhline(y=100, color="gray", linestyle="--", label="Initial (100%)")
+               label=f"Paper Trading ({paper_results['total_return_pct']:.2f}%)", 
+               linewidth=2, color="orange")
+        
+        ax.axhline(y=100, color="gray", linestyle=":", label="Initial (100%)", alpha=0.5)
+        
         ax.set_xlabel("Trade #")
         ax.set_ylabel("Portfolio Value (Normalisiert, Start=100%)")
-        ax.set_title("Equity Curve: Paper Trading vs. Backtest")
+        ax.set_title("Equity Curve: Paper Trading vs. Buy & Hold")
         ax.legend()
         ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
         plt.savefig(os.path.join(output_dir, "03_equity_comparison.png"), dpi=300)
+        plt.close()
+    
+    # 5. Marktvergleich: Paper Trading vs. Buy & Hold (über Zeit)
+    if prices is not None and not prices.empty and not positions_df.empty:
+        fig, ax = plt.subplots(figsize=(16, 8))
+        
+        # Buy & Hold Performance über Zeit
+        buy_hold = calculate_buy_and_hold(prices, paper_results["initial_capital"])
+        if not buy_hold["equity_curve"].empty:
+            bh_normalized = (buy_hold["equity_curve"]["equity"] / buy_hold["initial_capital"]) * 100
+            ax.plot(buy_hold["equity_curve"].index, bh_normalized.values,
+                   label=f"Buy & Hold ({buy_hold['total_return_pct']:.2f}%)", 
+                   linewidth=2, alpha=0.7, color="blue")
+        
+        # Paper Trading Equity Curve über Zeit
+        positions_df_sorted = positions_df.sort_values("exit_time")
+        paper_equity = [paper_results["initial_capital"]]
+        paper_timestamps = [prices.index[0]]  # Start mit erstem Preis-Zeitpunkt
+        
+        for _, pos in positions_df_sorted.iterrows():
+            paper_equity.append(paper_equity[-1] + pos["profit"])
+            paper_timestamps.append(pos["exit_time"])
+        
+        paper_equity_normalized = [(e / paper_results["initial_capital"]) * 100 for e in paper_equity]
+        ax.plot(paper_timestamps, paper_equity_normalized,
+               label=f"Paper Trading ({paper_results['total_return_pct']:.2f}%)",
+               linewidth=2, color="orange")
+        
+        ax.axhline(y=100, color="gray", linestyle="--", label="Initial (100%)", alpha=0.5)
+        ax.set_xlabel("Zeit")
+        ax.set_ylabel("Normalisierter Wert (Start = 100%)")
+        ax.set_title("Marktentwicklung: Paper Trading vs. Buy & Hold")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "04_market_comparison.png"), dpi=300)
         plt.close()
     
     print(f"[plots] Analyse-Plots gespeichert in: {output_dir}")
@@ -831,10 +947,15 @@ def main():
         # Zeitrahmen-Analyse
         timeframes = analyze_timeframes(paper_results["positions"])
         
+        # Berechne Buy & Hold Performance
+        buy_hold_results = calculate_buy_and_hold(df[["close"]], paper_results["initial_capital"])
+        
         all_results[ticker] = {
             "paper": paper_results,
             "timeframes": timeframes,
             "signals": signals,
+            "buy_hold": buy_hold_results,
+            "prices": df[["close"]],
         }
         
         # Performance-Report
@@ -855,11 +976,38 @@ def main():
         print(f"Max. Profit:           ${paper_results['max_profit']:.2f}")
         print(f"Max. Verlust:          ${paper_results['max_loss']:.2f}")
         print(f"Sharpe Ratio:          {paper_results['sharpe_ratio']:.2f}")
+        print("")
+        print(f"BUY & HOLD:")
+        print(f"  Finales Kapital:     ${buy_hold_results['final_capital']:,.2f}")
+        print(f"  Total Return:        {buy_hold_results['total_return_pct']:.2f}%")
+        print(f"  Outperformance:      {paper_results['total_return_pct'] - buy_hold_results['total_return_pct']:.2f}%")
         print("=" * 80)
     
     # Vergleich mit Backtest
     backtest_results = load_backtest_results()
     
+    # Vergleich: Paper Trading vs. Buy & Hold
+    if all_results:
+        print("\n" + "=" * 80)
+        print("VERGLEICH: PAPER TRADING vs. BUY & HOLD")
+        print("=" * 80)
+        print(f"{'Metrik':<25} {'Paper Trading':<20} {'Buy & Hold':<20} {'Differenz':<20}")
+        print("-" * 80)
+        
+        for ticker, results in all_results.items():
+            paper_val = results["paper"].get("total_return_pct", 0)
+            bh_val = results["buy_hold"].get("total_return_pct", 0)
+            diff = paper_val - bh_val
+            print(f"{'Total Return (%)':<25} {paper_val:>18.2f} {bh_val:>18.2f} {diff:>18.2f}")
+            
+            paper_capital = results["paper"].get("final_capital", 0)
+            bh_capital = results["buy_hold"].get("final_capital", 0)
+            capital_diff = paper_capital - bh_capital
+            print(f"{'Finales Kapital ($)':<25} {paper_capital:>18.2f} {bh_capital:>18.2f} {capital_diff:>18.2f}")
+        
+        print("=" * 80)
+    
+    # Vergleich: Paper Trading vs. Backtest
     if backtest_results:
         print("\n" + "=" * 80)
         print("VERGLEICH: PAPER TRADING vs. BACKTEST")
@@ -891,7 +1039,8 @@ def main():
             results["paper"],
             results["timeframes"],
             backtest_results,
-            ticker_dir
+            ticker_dir,
+            prices=results.get("prices")
         )
         
         # Speichere Positionen
