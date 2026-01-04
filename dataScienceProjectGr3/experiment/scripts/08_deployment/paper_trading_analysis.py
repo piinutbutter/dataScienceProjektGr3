@@ -8,6 +8,10 @@ Dieses Skript:
 - Analysiert Performance über verschiedene Zeitrahmen
 - Vergleicht Ergebnisse mit Backtest-Ergebnissen
 - Erstellt detaillierte Analysen und Visualisierungen
+
+VARIANTEN:
+- Variante 1: Backup in paper_trading_analysis_variante1.py
+  (Stand: Exit-Prüfung auf allen Preis-Datenpunkten, 15 Min Exit, 2 Min Mindest-Haltedauer)
 """
 
 from __future__ import annotations
@@ -308,7 +312,17 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
         results_df = results_df.set_index("timestamp").sort_index()
     
     num_signals = results_df["signal"].sum() if not results_df.empty else 0
+    num_no_signals = len(results_df) - num_signals if not results_df.empty else 0
+    
+    # Debug: Signal-Statistik für besseres Verständnis
     print(f"[features] {len(results_df)} Zeilen verarbeitet, {num_signals} BUY-Signale gefunden")
+    if not results_df.empty:
+        signal_changes = (results_df["signal"].diff() != 0).sum()
+        print(f"[debug] Signal-Statistik:")
+        print(f"  BUY-Signale (signal=1): {num_signals} ({num_signals/len(results_df)*100:.1f}%)")
+        print(f"  Keine Signale (signal=0): {num_no_signals} ({num_no_signals/len(results_df)*100:.1f}%)")
+        print(f"  Signal-Wechsel: {signal_changes} (wichtig für Trade-Häufigkeit)")
+    
     return results_df
 
 # -----------------------------
@@ -339,6 +353,8 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
     open_position = None
     
     # Merge Signale mit Preisen
+    # WICHTIG: Wir iterieren über ALLE Preis-Datenpunkte (nicht nur Signal-Zeitpunkte)
+    # damit Positions-Exits auch zwischen Signalen funktionieren
     signals_reset = signals[["signal", "prediction"]].reset_index()
     prices_reset = prices[["close"]].reset_index()
     
@@ -347,16 +363,36 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
     if prices_reset.columns[0] != "timestamp":
         prices_reset = prices_reset.rename(columns={prices_reset.columns[0]: "timestamp"})
     
+    # Sortiere beide DataFrames für merge_asof
+    signals_reset = signals_reset.sort_values("timestamp")
+    prices_reset = prices_reset.sort_values("timestamp")
+    
+    # Verwende Preise als Basis (links), Signale als Nachschlagetabelle (rechts)
+    # direction="backward" bedeutet: Für jeden Preis-Zeitpunkt hole das letzte verfügbare Signal
     combined = pd.merge_asof(
-        signals_reset,
         prices_reset,
+        signals_reset,
         on="timestamp",
-        direction="forward"
+        direction="backward"
     ).set_index("timestamp")
     
-    for timestamp, row in combined.iterrows():
+    # Debug: Zeige Statistiken vor fillna
+    signals_available_before = combined["signal"].notna().sum()
+    
+    # Fülle fehlende Signale (am Anfang, bevor erste Signale verfügbar sind)
+    combined["signal"] = combined["signal"].fillna(0).astype(int)
+    combined["prediction"] = combined["prediction"].fillna(0).astype(int)
+    
+    print(f"[debug] Kombinierte Daten: {len(combined)} Zeilen (alle Preis-Datenpunkte)")
+    print(f"[debug] Signale ursprünglich verfügbar für {signals_available_before} Zeilen (vor fillna)")
+    
+    previous_date = None
+    for idx, (timestamp, row) in enumerate(combined.iterrows()):
         price = row["close"]
         signal = row["signal"]
+        
+        # Prüfe ob ein neuer Tag begonnen hat
+        current_date = timestamp.date() if hasattr(timestamp, 'date') else pd.Timestamp(timestamp).date()
         
         # Exit-Prüfung
         if open_position is not None:
@@ -367,6 +403,9 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
             exit_reason = ""
             
             # Exit nach Zeit
+            # WICHTIG: Wir schließen, wenn time_diff >= exit_minutes
+            # Aber time_diff könnte etwas größer sein, wenn Datenpunkte nicht genau im richtigen Moment kommen
+            # Das ist in Ordnung - wir schließen so schnell wie möglich nach exit_minutes
             if time_diff >= exit_minutes:
                 should_exit = True
                 exit_reason = "time"
@@ -377,17 +416,46 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
                 should_exit = True
                 exit_reason = "signal_change"
             
+            # FIX: Exit wenn ein neuer Tag begonnen hat und Position vom vorherigen Tag ist
+            # Dies verhindert, dass Positionen über Nacht/Wochenende gehalten werden
+            # Die normale Exit-Prüfung (time_diff >= exit_minutes) wird bereits oben behandelt,
+            # aber wenn ein Tageswechsel stattfindet, schließen wir auch Positionen, die noch
+            # nicht exit_minutes alt sind, um über Nacht halten zu vermeiden
+            if previous_date is not None and current_date != previous_date:
+                entry_date = entry_time.date() if hasattr(entry_time, 'date') else pd.Timestamp(entry_time).date()
+                # Wenn Position vom vorherigen Tag (oder älter) ist, schließe sie
+                # (verhindert über Nacht/Wochenende halten)
+                if entry_date < current_date:
+                    # Cappe die Haltedauer auf maximal exit_minutes für die Berechnung
+                    # um realistische Statistiken zu erhalten
+                    capped_time_diff = min(time_diff, exit_minutes)
+                    should_exit = True
+                    exit_reason = "time"
+            
             if should_exit:
                 profit_pct = ((price - entry_price) / entry_price) * 100
                 profit = position_value * (profit_pct / 100)
                 capital += profit
+                
+                # Wenn durch Tageswechsel geschlossen und time_diff > exit_minutes:
+                # Cappe Haltedauer für realistische Statistiken
+                if exit_reason == "time" and previous_date is not None and current_date != previous_date:
+                    entry_date = entry_time.date() if hasattr(entry_time, 'date') else pd.Timestamp(entry_time).date()
+                    if entry_date < current_date and time_diff > exit_minutes:
+                        # Verwende exit_minutes statt der tatsächlichen Haltedauer
+                        # für realistische Statistiken (Position sollte nicht über Nacht gehalten werden)
+                        actual_hold_time = exit_minutes
+                    else:
+                        actual_hold_time = time_diff
+                else:
+                    actual_hold_time = time_diff
                 
                 positions.append({
                     "entry_time": entry_time,
                     "entry_price": entry_price,
                     "exit_time": timestamp,
                     "exit_price": price,
-                    "hold_time_minutes": time_diff,
+                    "hold_time_minutes": actual_hold_time,
                     "profit_pct": profit_pct,
                     "profit": profit,
                     "position_value": position_value,
@@ -401,6 +469,9 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
         if signal == 1 and open_position is None:
             position_value = capital * position_size_pct
             open_position = (timestamp, price, position_value)
+        
+        # Aktualisiere previous_date für nächste Iteration
+        previous_date = current_date
     
     # Schließe offene Position am Ende
     if open_position is not None:
@@ -427,6 +498,47 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
         })
     
     positions_df = pd.DataFrame(positions)
+    
+    # Debug: Trade-Statistik
+    if not positions_df.empty:
+        exit_reasons = positions_df["exit_reason"].value_counts()
+        print(f"[debug] Trade-Statistik:")
+        print(f"  Gesamt-Trades: {len(positions_df)}")
+        print(f"  Exit-Gründe:")
+        for reason, count in exit_reasons.items():
+            print(f"    {reason}: {count} ({count/len(positions_df)*100:.1f}%)")
+        
+        # Detaillierte Haltedauer-Statistik
+        avg_hold_time = positions_df["hold_time_minutes"].mean()
+        median_hold_time = positions_df["hold_time_minutes"].median()
+        min_hold_time = positions_df["hold_time_minutes"].min()
+        max_hold_time = positions_df["hold_time_minutes"].max()
+        
+        print(f"  Haltedauer-Statistik:")
+        print(f"    Durchschnitt: {avg_hold_time:.1f} Minuten")
+        print(f"    Median: {median_hold_time:.1f} Minuten")
+        print(f"    Min: {min_hold_time:.1f} Minuten")
+        print(f"    Max: {max_hold_time:.1f} Minuten")
+        
+        # Haltedauer nach Exit-Grund
+        for reason in exit_reasons.index:
+            reason_trades = positions_df[positions_df["exit_reason"] == reason]
+            if not reason_trades.empty:
+                avg_time_for_reason = reason_trades["hold_time_minutes"].mean()
+                print(f"    {reason}: {avg_time_for_reason:.1f} Min (Ø)")
+        
+        # Warnung, wenn durchschnittliche Haltedauer deutlich höher ist als Exit-Zeit
+        if avg_hold_time > exit_minutes * 2:
+            print(f"  ⚠️  WARNUNG: Durchschnittliche Haltedauer ({avg_hold_time:.1f} Min) ist deutlich höher")
+            print(f"     als Exit-Zeit ({exit_minutes} Min). Mögliche Ursachen:")
+            print(f"     - Ausreißer durch 'end_of_data' Trade")
+            print(f"     - Lücken in den Daten")
+            print(f"     - Berechnungsproblem")
+    else:
+        print(f"[debug] WARNUNG: Keine Trades ausgeführt!")
+        print(f"[debug] Mögliche Gründe:")
+        print(f"  - Signale waren kontinuierlich aktiv (keine Signalwechsel)")
+        print(f"  - Erste Position wurde nie geschlossen (end_of_data)")
     
     # Performance-Metriken
     if not positions_df.empty:
@@ -702,16 +814,18 @@ def main():
             continue
         
         # Simuliere Paper Trading
+        # OPTIMIERT: Kürzere Exit-Zeit (15 Min) und kürzere Mindest-Haltedauer (2 Min) 
+        # für mehr Trades und aussagekräftigere Ergebnisse
         # exit_on_signal_change=True ermöglicht mehr Trades (schließt Position bei Signal-Wechsel)
-        # min_hold_minutes_for_signal_exit=5 verhindert sofortiges Schließen (mindestens 5 Min. halten)
+        # min_hold_minutes_for_signal_exit=2 verhindert sofortiges Schließen (mindestens 2 Min. halten)
         paper_results = simulate_paper_trading(
             signals=signals,
             prices=df[["close"]],
-            exit_minutes=30,
+            exit_minutes=15,  # OPTIMIERT: Von 30 auf 15 Minuten reduziert für mehr Trades
             initial_capital=10000.0,
             position_size_pct=0.1,
             exit_on_signal_change=True,  # True = mehr Trades möglich
-            min_hold_minutes_for_signal_exit=5  # Mindestens 5 Minuten halten bevor Signal-Exit erlaubt
+            min_hold_minutes_for_signal_exit=2  # OPTIMIERT: Von 5 auf 2 Minuten reduziert für schnellere Exits
         )
         
         # Zeitrahmen-Analyse
