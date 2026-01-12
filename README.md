@@ -881,3 +881,21 @@ Potential improvements to enhance trading performance:
 - **Signal Filtering**: Add filters for signal quality (confidence thresholds, trend strength) to improve trade selection
 - **Parameter Optimization**: Optimize exit times and other parameters using grid search or walk-forward analysis
 - **Model Improvements**: Combine multiple models (ensemble methods) or implement online learning for adaptation to market changes
+
+# Iteration 1
+## Buy & Hold Benchmark
+
+We implemented a Buy & Hold strategy as a benchmark to evaluate the performance of our trading strategy. The Buy & Hold strategy simply purchases the asset at the beginning of the period and holds it until the end, providing a baseline comparison against our signal-based trading approach.
+
+**Implementation:**
+- Buy & Hold performance is calculated for the same time period as Paper Trading
+- Results are displayed alongside Paper Trading metrics for direct comparison
+- Visualizations include Buy & Hold equity curves in comparison plots
+
+**Results:**
+In the current analysis period, Buy & Hold achieved a **3.64% total return**, significantly outperforming the Paper Trading strategy which returned **0.12%**. This comparison helps assess whether the trading strategy adds value beyond a simple buy-and-hold approach.
+
+The equity curve comparison (see Figure: "Equity Curve: Paper Trading vs. Buy & Hold") visually demonstrates the performance difference, with Buy & Hold showing steady growth throughout the period while Paper Trading remained relatively flat near the initial value.
+
+**Purpose:**
+The Buy & Hold benchmark serves as a critical evaluation metric, allowing us to determine if the trading strategy provides alpha (excess returns) or if a passive investment approach would be more effective. This comparison is essential for strategy validation and helps identify periods where the model-based approach may underperform the market.

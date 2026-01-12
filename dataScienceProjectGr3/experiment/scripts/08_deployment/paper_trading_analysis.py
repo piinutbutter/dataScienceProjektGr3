@@ -233,6 +233,8 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
         sys.stdout = old_stdout
     
     # Feature-Frame bauen
+    # WICHTIG: df_feat hat einen Integer-Index, nicht einen DatetimeIndex
+    # Wir müssen die Features mit den richtigen Timestamps vom ursprünglichen DataFrame verknüpfen
     X = pd.DataFrame(index=df_feat.index)
     for col in FEATURES:
         if col in df_feat.columns:
@@ -245,14 +247,17 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
     if X.empty:
         return pd.DataFrame()
     
-    # Merge Features mit Preisen, um sicherzustellen, dass Indizes übereinstimmen
-    # Verwende merge_asof für bessere Synchronisation
-    X_reset = X.reset_index()
-    # Stelle sicher, dass die erste Spalte "timestamp" heißt und datetime ist
-    if X_reset.columns[0] != "timestamp":
-        X_reset = X_reset.rename(columns={X_reset.columns[0]: "timestamp"})
+    # Merge Features mit Preisen - verwende die Timestamps vom ursprünglichen DataFrame
+    # df_feat hat denselben Index wie df_features_input (mit DatetimeIndex)
+    # Aber generate_features gibt einen DataFrame mit Integer-Index zurück
+    # Wir müssen die Timestamps vom ursprünglichen df verwenden
     
-    # Konvertiere zu datetime und stelle sicher, dass Timezone konsistent ist
+    # Lösungsansatz: Verwende df.index direkt, da df_features_input dasselbe ist wie df[["close", "open", "high", "low"]]
+    # df_features_input hat den gleichen Index wie df
+    X_reset = X.reset_index(drop=True)  # Reset zu Integer-Index
+    X_reset["timestamp"] = df.index[:len(X_reset)]  # Verwende Timestamps vom ursprünglichen DataFrame
+    
+    # Stelle sicher, dass Timezone konsistent ist
     X_reset["timestamp"] = pd.to_datetime(X_reset["timestamp"])
     if X_reset["timestamp"].dt.tz is None:
         # Wenn naive, konvertiere zu UTC (wie df)
@@ -308,20 +313,16 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
         })
     
     results_df = pd.DataFrame(results)
+    
     if not results_df.empty:
+        # Stelle sicher, dass timestamp als datetime behandelt wird
+        if not pd.api.types.is_datetime64_any_dtype(results_df["timestamp"]):
+            results_df["timestamp"] = pd.to_datetime(results_df["timestamp"])
         results_df = results_df.set_index("timestamp").sort_index()
     
     num_signals = results_df["signal"].sum() if not results_df.empty else 0
-    num_no_signals = len(results_df) - num_signals if not results_df.empty else 0
     
-    # Debug: Signal-Statistik für besseres Verständnis
     print(f"[features] {len(results_df)} Zeilen verarbeitet, {num_signals} BUY-Signale gefunden")
-    if not results_df.empty:
-        signal_changes = (results_df["signal"].diff() != 0).sum()
-        print(f"[debug] Signal-Statistik:")
-        print(f"  BUY-Signale (signal=1): {num_signals} ({num_signals/len(results_df)*100:.1f}%)")
-        print(f"  Keine Signale (signal=0): {num_no_signals} ({num_no_signals/len(results_df)*100:.1f}%)")
-        print(f"  Signal-Wechsel: {signal_changes} (wichtig für Trade-Häufigkeit)")
     
     return results_df
 
@@ -355,13 +356,35 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
     # Merge Signale mit Preisen
     # WICHTIG: Wir iterieren über ALLE Preis-Datenpunkte (nicht nur Signal-Zeitpunkte)
     # damit Positions-Exits auch zwischen Signalen funktionieren
-    signals_reset = signals[["signal", "prediction"]].reset_index()
-    prices_reset = prices[["close"]].reset_index()
     
-    if signals_reset.columns[0] != "timestamp":
-        signals_reset = signals_reset.rename(columns={signals_reset.columns[0]: "timestamp"})
+    # Stelle sicher, dass signals einen Index hat (nicht bereits reset)
+    if isinstance(signals.index, pd.DatetimeIndex):
+        signals_reset = signals[["signal", "prediction"]].reset_index()
+        # Benenne Index-Spalte um, falls nötig
+        if signals_reset.columns[0] != "timestamp":
+            signals_reset = signals_reset.rename(columns={signals_reset.columns[0]: "timestamp"})
+    else:
+        # Falls bereits reset, sollte timestamp Spalte vorhanden sein
+        signals_reset = signals[["signal", "prediction", "timestamp"]].copy() if "timestamp" in signals.columns else signals[["signal", "prediction"]].copy()
+        if "timestamp" not in signals_reset.columns:
+            raise ValueError("Signals DataFrame muss 'timestamp' als Index oder Spalte haben")
+    
+    prices_reset = prices[["close"]].reset_index()
     if prices_reset.columns[0] != "timestamp":
         prices_reset = prices_reset.rename(columns={prices_reset.columns[0]: "timestamp"})
+    
+    # Stelle sicher, dass timestamp Spalten datetime sind
+    signals_reset["timestamp"] = pd.to_datetime(signals_reset["timestamp"])
+    if signals_reset["timestamp"].dt.tz is None:
+        signals_reset["timestamp"] = signals_reset["timestamp"].dt.tz_localize("UTC")
+    else:
+        signals_reset["timestamp"] = signals_reset["timestamp"].dt.tz_convert("UTC")
+    
+    prices_reset["timestamp"] = pd.to_datetime(prices_reset["timestamp"])
+    if prices_reset["timestamp"].dt.tz is None:
+        prices_reset["timestamp"] = prices_reset["timestamp"].dt.tz_localize("UTC")
+    else:
+        prices_reset["timestamp"] = prices_reset["timestamp"].dt.tz_convert("UTC")
     
     # Sortiere beide DataFrames für merge_asof
     signals_reset = signals_reset.sort_values("timestamp")
@@ -376,15 +399,9 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
         direction="backward"
     ).set_index("timestamp")
     
-    # Debug: Zeige Statistiken vor fillna
-    signals_available_before = combined["signal"].notna().sum()
-    
     # Fülle fehlende Signale (am Anfang, bevor erste Signale verfügbar sind)
     combined["signal"] = combined["signal"].fillna(0).astype(int)
     combined["prediction"] = combined["prediction"].fillna(0).astype(int)
-    
-    print(f"[debug] Kombinierte Daten: {len(combined)} Zeilen (alle Preis-Datenpunkte)")
-    print(f"[debug] Signale ursprünglich verfügbar für {signals_available_before} Zeilen (vor fillna)")
     
     previous_date = None
     for idx, (timestamp, row) in enumerate(combined.iterrows()):
@@ -498,47 +515,6 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
         })
     
     positions_df = pd.DataFrame(positions)
-    
-    # Debug: Trade-Statistik
-    if not positions_df.empty:
-        exit_reasons = positions_df["exit_reason"].value_counts()
-        print(f"[debug] Trade-Statistik:")
-        print(f"  Gesamt-Trades: {len(positions_df)}")
-        print(f"  Exit-Gründe:")
-        for reason, count in exit_reasons.items():
-            print(f"    {reason}: {count} ({count/len(positions_df)*100:.1f}%)")
-        
-        # Detaillierte Haltedauer-Statistik
-        avg_hold_time = positions_df["hold_time_minutes"].mean()
-        median_hold_time = positions_df["hold_time_minutes"].median()
-        min_hold_time = positions_df["hold_time_minutes"].min()
-        max_hold_time = positions_df["hold_time_minutes"].max()
-        
-        print(f"  Haltedauer-Statistik:")
-        print(f"    Durchschnitt: {avg_hold_time:.1f} Minuten")
-        print(f"    Median: {median_hold_time:.1f} Minuten")
-        print(f"    Min: {min_hold_time:.1f} Minuten")
-        print(f"    Max: {max_hold_time:.1f} Minuten")
-        
-        # Haltedauer nach Exit-Grund
-        for reason in exit_reasons.index:
-            reason_trades = positions_df[positions_df["exit_reason"] == reason]
-            if not reason_trades.empty:
-                avg_time_for_reason = reason_trades["hold_time_minutes"].mean()
-                print(f"    {reason}: {avg_time_for_reason:.1f} Min (Ø)")
-        
-        # Warnung, wenn durchschnittliche Haltedauer deutlich höher ist als Exit-Zeit
-        if avg_hold_time > exit_minutes * 2:
-            print(f"  ⚠️  WARNUNG: Durchschnittliche Haltedauer ({avg_hold_time:.1f} Min) ist deutlich höher")
-            print(f"     als Exit-Zeit ({exit_minutes} Min). Mögliche Ursachen:")
-            print(f"     - Ausreißer durch 'end_of_data' Trade")
-            print(f"     - Lücken in den Daten")
-            print(f"     - Berechnungsproblem")
-    else:
-        print(f"[debug] WARNUNG: Keine Trades ausgeführt!")
-        print(f"[debug] Mögliche Gründe:")
-        print(f"  - Signale waren kontinuierlich aktiv (keine Signalwechsel)")
-        print(f"  - Erste Position wurde nie geschlossen (end_of_data)")
     
     # Performance-Metriken
     if not positions_df.empty:
@@ -682,10 +658,55 @@ def load_backtest_results() -> Dict | None:
     return None
 
 # -----------------------------
+# Buy & Hold Berechnung
+# -----------------------------
+def calculate_buy_and_hold(prices: pd.DataFrame, initial_capital: float = 10000.0) -> Dict:
+    """Berechnet Buy & Hold Performance.
+    
+    Args:
+        prices: DataFrame mit 'close' Spalte und DatetimeIndex
+        initial_capital: Initiales Kapital
+    
+    Returns:
+        Dict mit Buy & Hold Metriken
+    """
+    if prices.empty or "close" not in prices.columns:
+        return {
+            "initial_capital": initial_capital,
+            "final_capital": initial_capital,
+            "total_return_pct": 0.0,
+            "equity_curve": pd.DataFrame(),
+        }
+    
+    # Berechne Buy & Hold Performance
+    first_price = prices["close"].iloc[0]
+    last_price = prices["close"].iloc[-1]
+    
+    # Anzahl Aktien die man kaufen könnte
+    shares = initial_capital / first_price
+    final_capital = shares * last_price
+    total_return_pct = ((final_capital - initial_capital) / initial_capital) * 100
+    
+    # Equity Curve über Zeit
+    equity_curve = (prices["close"] / first_price) * initial_capital
+    equity_curve_df = pd.DataFrame({
+        "timestamp": equity_curve.index,
+        "equity": equity_curve.values
+    }).set_index("timestamp")
+    
+    return {
+        "initial_capital": initial_capital,
+        "final_capital": final_capital,
+        "total_return_pct": total_return_pct,
+        "equity_curve": equity_curve_df,
+    }
+
+# -----------------------------
 # Visualisierungen
 # -----------------------------
 def create_analysis_plots(paper_results: Dict, timeframes: Dict, 
-                         backtest_results: Dict | None, output_dir: str):
+                         backtest_results: Dict | None, output_dir: str,
+                         prices: pd.DataFrame | None = None):
     """Erstellt umfassende Analyse-Plots."""
     os.makedirs(output_dir, exist_ok=True)
     print(f"[plots] Erstelle Analyse-Plots...")
@@ -757,28 +778,99 @@ def create_analysis_plots(paper_results: Dict, timeframes: Dict,
     # (Wird nur relevant wenn mehrere Ticker verwendet werden)
     
     # 4. Equity Curve Vergleich
-    if backtest_results and not positions_df.empty:
+    if not positions_df.empty:
         fig, ax = plt.subplots(figsize=(16, 8))
         
         # Paper Trading Equity Curve
-        positions_df = positions_df.sort_values("exit_time")
+        positions_df_sorted = positions_df.sort_values("exit_time")
         paper_equity = [paper_results["initial_capital"]]
-        for profit in positions_df["profit"]:
-            paper_equity.append(paper_equity[-1] + profit)
+        paper_timestamps = []
+        if prices is not None and not prices.empty:
+            paper_timestamps.append(prices.index[0])
+        else:
+            paper_timestamps.append(positions_df_sorted["entry_time"].iloc[0])
+        
+        for _, pos in positions_df_sorted.iterrows():
+            paper_equity.append(paper_equity[-1] + pos["profit"])
+            paper_timestamps.append(pos["exit_time"])
         
         paper_equity_normalized = [(e / paper_results["initial_capital"]) * 100 for e in paper_equity]
         
+        # Buy & Hold Equity Curve (wenn Preisdaten verfügbar)
+        if prices is not None and not prices.empty:
+            buy_hold = calculate_buy_and_hold(prices, paper_results["initial_capital"])
+            if not buy_hold["equity_curve"].empty:
+                # Interpoliere Buy & Hold auf Paper Trading Zeitpunkte
+                bh_curve = buy_hold["equity_curve"]
+                bh_values_at_trades = []
+                for ts in paper_timestamps:
+                    # Finde den nächsten Wert in der Buy & Hold Curve
+                    if ts in bh_curve.index:
+                        bh_val = bh_curve.loc[ts, "equity"]
+                    else:
+                        # Finde den nächsten verfügbaren Wert
+                        before = bh_curve[bh_curve.index <= ts]
+                        if not before.empty:
+                            bh_val = before.iloc[-1]["equity"]
+                        else:
+                            bh_val = buy_hold["initial_capital"]
+                    bh_values_at_trades.append((bh_val / buy_hold["initial_capital"]) * 100)
+                
+                ax.plot(range(len(bh_values_at_trades)), bh_values_at_trades,
+                       label=f"Buy & Hold ({buy_hold['total_return_pct']:.2f}%)",
+                       linewidth=2, color="blue", linestyle="--", alpha=0.7)
+        
         ax.plot(range(len(paper_equity_normalized)), paper_equity_normalized, 
-               label="Paper Trading (Live)", linewidth=2)
-        ax.axhline(y=100, color="gray", linestyle="--", label="Initial (100%)")
+               label=f"Paper Trading ({paper_results['total_return_pct']:.2f}%)", 
+               linewidth=2, color="orange")
+        
+        ax.axhline(y=100, color="gray", linestyle=":", label="Initial (100%)", alpha=0.5)
+        
         ax.set_xlabel("Trade #")
         ax.set_ylabel("Portfolio Value (Normalisiert, Start=100%)")
-        ax.set_title("Equity Curve: Paper Trading vs. Backtest")
+        ax.set_title("Equity Curve: Paper Trading vs. Buy & Hold")
         ax.legend()
         ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
         plt.savefig(os.path.join(output_dir, "03_equity_comparison.png"), dpi=300)
+        plt.close()
+    
+    # 5. Marktvergleich: Paper Trading vs. Buy & Hold (über Zeit)
+    if prices is not None and not prices.empty and not positions_df.empty:
+        fig, ax = plt.subplots(figsize=(16, 8))
+        
+        # Buy & Hold Performance über Zeit
+        buy_hold = calculate_buy_and_hold(prices, paper_results["initial_capital"])
+        if not buy_hold["equity_curve"].empty:
+            bh_normalized = (buy_hold["equity_curve"]["equity"] / buy_hold["initial_capital"]) * 100
+            ax.plot(buy_hold["equity_curve"].index, bh_normalized.values,
+                   label=f"Buy & Hold ({buy_hold['total_return_pct']:.2f}%)", 
+                   linewidth=2, alpha=0.7, color="blue")
+        
+        # Paper Trading Equity Curve über Zeit
+        positions_df_sorted = positions_df.sort_values("exit_time")
+        paper_equity = [paper_results["initial_capital"]]
+        paper_timestamps = [prices.index[0]]  # Start mit erstem Preis-Zeitpunkt
+        
+        for _, pos in positions_df_sorted.iterrows():
+            paper_equity.append(paper_equity[-1] + pos["profit"])
+            paper_timestamps.append(pos["exit_time"])
+        
+        paper_equity_normalized = [(e / paper_results["initial_capital"]) * 100 for e in paper_equity]
+        ax.plot(paper_timestamps, paper_equity_normalized,
+               label=f"Paper Trading ({paper_results['total_return_pct']:.2f}%)",
+               linewidth=2, color="orange")
+        
+        ax.axhline(y=100, color="gray", linestyle="--", label="Initial (100%)", alpha=0.5)
+        ax.set_xlabel("Zeit")
+        ax.set_ylabel("Normalisierter Wert (Start = 100%)")
+        ax.set_title("Marktentwicklung: Paper Trading vs. Buy & Hold")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, "04_market_comparison.png"), dpi=300)
         plt.close()
     
     print(f"[plots] Analyse-Plots gespeichert in: {output_dir}")
@@ -831,10 +923,15 @@ def main():
         # Zeitrahmen-Analyse
         timeframes = analyze_timeframes(paper_results["positions"])
         
+        # Berechne Buy & Hold Performance
+        buy_hold_results = calculate_buy_and_hold(df[["close"]], paper_results["initial_capital"])
+        
         all_results[ticker] = {
             "paper": paper_results,
             "timeframes": timeframes,
             "signals": signals,
+            "buy_hold": buy_hold_results,
+            "prices": df[["close"]],
         }
         
         # Performance-Report
@@ -855,11 +952,38 @@ def main():
         print(f"Max. Profit:           ${paper_results['max_profit']:.2f}")
         print(f"Max. Verlust:          ${paper_results['max_loss']:.2f}")
         print(f"Sharpe Ratio:          {paper_results['sharpe_ratio']:.2f}")
+        print("")
+        print(f"BUY & HOLD:")
+        print(f"  Finales Kapital:     ${buy_hold_results['final_capital']:,.2f}")
+        print(f"  Total Return:        {buy_hold_results['total_return_pct']:.2f}%")
+        print(f"  Outperformance:      {paper_results['total_return_pct'] - buy_hold_results['total_return_pct']:.2f}%")
         print("=" * 80)
     
     # Vergleich mit Backtest
     backtest_results = load_backtest_results()
     
+    # Vergleich: Paper Trading vs. Buy & Hold
+    if all_results:
+        print("\n" + "=" * 80)
+        print("VERGLEICH: PAPER TRADING vs. BUY & HOLD")
+        print("=" * 80)
+        print(f"{'Metrik':<25} {'Paper Trading':<20} {'Buy & Hold':<20} {'Differenz':<20}")
+        print("-" * 80)
+        
+        for ticker, results in all_results.items():
+            paper_val = results["paper"].get("total_return_pct", 0)
+            bh_val = results["buy_hold"].get("total_return_pct", 0)
+            diff = paper_val - bh_val
+            print(f"{'Total Return (%)':<25} {paper_val:>18.2f} {bh_val:>18.2f} {diff:>18.2f}")
+            
+            paper_capital = results["paper"].get("final_capital", 0)
+            bh_capital = results["buy_hold"].get("final_capital", 0)
+            capital_diff = paper_capital - bh_capital
+            print(f"{'Finales Kapital ($)':<25} {paper_capital:>18.2f} {bh_capital:>18.2f} {capital_diff:>18.2f}")
+        
+        print("=" * 80)
+    
+    # Vergleich: Paper Trading vs. Backtest
     if backtest_results:
         print("\n" + "=" * 80)
         print("VERGLEICH: PAPER TRADING vs. BACKTEST")
@@ -891,7 +1015,8 @@ def main():
             results["paper"],
             results["timeframes"],
             backtest_results,
-            ticker_dir
+            ticker_dir,
+            prices=results.get("prices")
         )
         
         # Speichere Positionen
