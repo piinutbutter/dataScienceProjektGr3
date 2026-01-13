@@ -893,9 +893,18 @@ We implemented a Buy & Hold strategy as a benchmark to evaluate the performance 
 - Visualizations include Buy & Hold equity curves in comparison plots
 
 **Results:**
-In the current analysis period, Buy & Hold achieved a **3.64% total return**, significantly outperforming the Paper Trading strategy which returned **0.12%**. This comparison helps assess whether the trading strategy adds value beyond a simple buy-and-hold approach.
+In the current analysis period, Buy & Hold achieved a **2.93% total return**,  outperforming the Paper Trading strategy which returned **0.16%**. This comparison helps assess whether the trading strategy adds value beyond a simple buy-and-hold approach.
+
+### Performance Comparison: Paper Trading vs. Buy & Hold
+
+| Metrik                    | Paper Trading | Buy & Hold | Differenz |
+|---------------------------|--------------|------------|-----------|
+| Total Return (%)          | 0.16         | 2.93       | -2.77     |
+| Finales Kapital ($)       | 10015.97    | 10292.82  | -276.85   |
+
 
 The equity curve comparison (see Figure: "Equity Curve: Paper Trading vs. Buy & Hold") visually demonstrates the performance difference, with Buy & Hold showing steady growth throughout the period while Paper Trading remained relatively flat near the initial value.
 
 **Purpose:**
 The Buy & Hold benchmark serves as a critical evaluation metric, allowing us to determine if the trading strategy provides alpha (excess returns) or if a passive investment approach would be more effective. This comparison is essential for strategy validation and helps identify periods where the model-based approach may underperform the market.
+
