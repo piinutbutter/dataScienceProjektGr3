@@ -301,15 +301,27 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
     # Batch-Vorhersage
     predictions = clf.predict(x_features)
     
+    # Versuche Wahrscheinlichkeiten zu erhalten (für Confidence-Filterung)
+    confidence_scores = None
+    if hasattr(clf, 'predict_proba'):
+        try:
+            proba = clf.predict_proba(x_features)
+            # Confidence ist die maximale Wahrscheinlichkeit (wie sicher ist das Modell)
+            confidence_scores = np.max(proba, axis=1)
+        except:
+            pass
+    
     # Erstelle Ergebnisse mit synchronisierten Preisen
-    for timestamp, (pred, price) in zip(merged.index, zip(predictions, merged["close"])):
+    for idx, (timestamp, (pred, price)) in enumerate(zip(merged.index, zip(predictions, merged["close"]))):
         pred_value = int(pred) if isinstance(pred, np.ndarray) else int(pred)
+        confidence = float(confidence_scores[idx]) if confidence_scores is not None else None
         
         results.append({
             "timestamp": timestamp,
             "price": float(price),
             "prediction": pred_value,
             "signal": 1 if pred_value == 1 else 0,
+            "confidence": confidence,
         })
     
     results_df = pd.DataFrame(results)
@@ -322,7 +334,20 @@ def compute_signals(df: pd.DataFrame) -> pd.DataFrame:
     
     num_signals = results_df["signal"].sum() if not results_df.empty else 0
     
-    print(f"[features] {len(results_df)} Zeilen verarbeitet, {num_signals} BUY-Signale gefunden")
+    # Zeige Confidence-Statistik (wenn verfügbar)
+    if not results_df.empty and "confidence" in results_df.columns and results_df["confidence"].notna().any():
+        confidence_stats = results_df["confidence"].describe()
+        buy_signals_with_conf = results_df[(results_df["signal"] == 1) & (results_df["confidence"].notna())]
+        if not buy_signals_with_conf.empty:
+            print(f"[features] {len(results_df)} Zeilen verarbeitet, {num_signals} BUY-Signale gefunden")
+            print(f"[features] Confidence-Statistik (BUY-Signale): Min={buy_signals_with_conf['confidence'].min():.3f}, "
+                  f"Median={buy_signals_with_conf['confidence'].median():.3f}, "
+                  f"Max={buy_signals_with_conf['confidence'].max():.3f}, "
+                  f"Mean={buy_signals_with_conf['confidence'].mean():.3f}")
+        else:
+            print(f"[features] {len(results_df)} Zeilen verarbeitet, {num_signals} BUY-Signale gefunden")
+    else:
+        print(f"[features] {len(results_df)} Zeilen verarbeitet, {num_signals} BUY-Signale gefunden")
     
     return results_df
 
@@ -334,24 +359,40 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
                           initial_capital: float = 10000.0,
                           position_size_pct: float = 0.1,
                           exit_on_signal_change: bool = True,
-                          min_hold_minutes_for_signal_exit: int = 5) -> Dict:
+                          min_hold_minutes_for_signal_exit: int = 5,
+                          confidence_threshold: float = None,
+                          stop_loss_pct: float = None,
+                          take_profit_pct: float = None,
+                          dynamic_position_size: bool = False) -> Dict:
     """Simuliert Paper Trading ohne echte Orders.
     
     Args:
         exit_on_signal_change: Wenn True, schließe Position auch wenn Signal von 1 auf 0 wechselt
                                (ermöglicht mehr Trades)
         min_hold_minutes_for_signal_exit: Mindest-Haltedauer in Minuten bevor Signal-Wechsel-Exit erlaubt ist
+        confidence_threshold: Optional. Nur Signale mit Confidence >= threshold verwenden (0.0-1.0)
+        stop_loss_pct: Optional. Stop-Loss in Prozent (z.B. 2.0 = -2%)
+        take_profit_pct: Optional. Take-Profit in Prozent (z.B. 1.0 = +1%)
+        dynamic_position_size: Wenn True, Position-Größe basierend auf Confidence anpassen
     """
     print(f"[paper] Simuliere Paper Trading...")
     print(f"  Exit nach: {exit_minutes} Minuten")
     if exit_on_signal_change:
         print(f"  Exit auch bei Signal-Wechsel: Ja (nach {min_hold_minutes_for_signal_exit} Min. Mindest-Haltedauer)")
+    if confidence_threshold is not None:
+        print(f"  Confidence-Threshold: {confidence_threshold:.2f} (nur Signale mit hoher Confidence)")
+    if stop_loss_pct is not None:
+        print(f"  Stop-Loss: {stop_loss_pct:.2f}%")
+    if take_profit_pct is not None:
+        print(f"  Take-Profit: {take_profit_pct:.2f}%")
+    if dynamic_position_size:
+        print(f"  Dynamische Position-Größe: Ja (basierend auf Confidence)")
     print(f"  Initiales Kapital: ${initial_capital:,.2f}")
-    print(f"  Position-Größe: {position_size_pct*100:.0f}%")
+    print(f"  Position-Größe: {position_size_pct*100:.0f}% {'(Basis, wird dynamisch angepasst)' if dynamic_position_size else ''}")
     
     capital = initial_capital
     positions = []
-    open_position = None
+    open_positions = []  # Liste von (entry_time, entry_price, position_value) - erlaubt mehrere Positionen
     
     # Merge Signale mit Preisen
     # WICHTIG: Wir iterieren über ALLE Preis-Datenpunkte (nicht nur Signal-Zeitpunkte)
@@ -359,15 +400,40 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
     
     # Stelle sicher, dass signals einen Index hat (nicht bereits reset)
     if isinstance(signals.index, pd.DatetimeIndex):
-        signals_reset = signals[["signal", "prediction"]].reset_index()
+        signal_cols = ["signal", "prediction"]
+        if "confidence" in signals.columns:
+            signal_cols.append("confidence")
+        signals_reset = signals[signal_cols].reset_index()
         # Benenne Index-Spalte um, falls nötig
         if signals_reset.columns[0] != "timestamp":
             signals_reset = signals_reset.rename(columns={signals_reset.columns[0]: "timestamp"})
     else:
         # Falls bereits reset, sollte timestamp Spalte vorhanden sein
-        signals_reset = signals[["signal", "prediction", "timestamp"]].copy() if "timestamp" in signals.columns else signals[["signal", "prediction"]].copy()
+        signal_cols = ["signal", "prediction"]
+        if "confidence" in signals.columns:
+            signal_cols.append("confidence")
+        if "timestamp" in signals.columns:
+            signal_cols.append("timestamp")
+        signals_reset = signals[signal_cols].copy()
         if "timestamp" not in signals_reset.columns:
             raise ValueError("Signals DataFrame muss 'timestamp' als Index oder Spalte haben")
+    
+    # Filtere Signale nach Confidence-Threshold (wenn angegeben)
+    if confidence_threshold is not None:
+        if "confidence" in signals_reset.columns:
+            # Prüfe ob Confidence-Werte vorhanden sind (nicht alle None)
+            has_confidence = signals_reset["confidence"].notna().any()
+            if has_confidence:
+                original_count = len(signals_reset[signals_reset["signal"] == 1])
+                # Setze Signal auf 0, wenn Confidence zu niedrig ist
+                signals_reset.loc[signals_reset["confidence"] < confidence_threshold, "signal"] = 0
+                filtered_count = len(signals_reset[signals_reset["signal"] == 1])
+                if original_count > 0:
+                    print(f"  Confidence-Filter: {original_count} → {filtered_count} Signale ({filtered_count/original_count*100:.1f}% behalten)")
+            else:
+                print(f"  ⚠️  WARNUNG: Confidence-Threshold gesetzt, aber keine Confidence-Werte verfügbar (Modell unterstützt kein predict_proba)")
+        else:
+            print(f"  ⚠️  WARNUNG: Confidence-Threshold gesetzt, aber keine Confidence-Spalte in Signalen gefunden")
     
     prices_reset = prices[["close"]].reset_index()
     if prices_reset.columns[0] != "timestamp":
@@ -402,6 +468,7 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
     # Fülle fehlende Signale (am Anfang, bevor erste Signale verfügbar sind)
     combined["signal"] = combined["signal"].fillna(0).astype(int)
     combined["prediction"] = combined["prediction"].fillna(0).astype(int)
+    # Confidence kann None bleiben, wenn nicht verfügbar
     
     previous_date = None
     for idx, (timestamp, row) in enumerate(combined.iterrows()):
@@ -411,41 +478,41 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
         # Prüfe ob ein neuer Tag begonnen hat
         current_date = timestamp.date() if hasattr(timestamp, 'date') else pd.Timestamp(timestamp).date()
         
-        # Exit-Prüfung
-        if open_position is not None:
-            entry_time, entry_price, position_value = open_position
+        # Exit-Prüfung für alle offenen Positionen
+        positions_to_close = []
+        for pos_idx, (entry_time, entry_price, position_value) in enumerate(open_positions):
             time_diff = (timestamp - entry_time).total_seconds() / 60
+            
+            # Berechne aktuellen Profit/Loss in Prozent
+            current_profit_pct = ((price - entry_price) / entry_price) * 100
             
             should_exit = False
             exit_reason = ""
             
+            # Stop-Loss Prüfung (höchste Priorität)
+            if stop_loss_pct is not None and current_profit_pct <= -stop_loss_pct:
+                should_exit = True
+                exit_reason = "stop_loss"
+            
+            # Take-Profit Prüfung
+            elif take_profit_pct is not None and current_profit_pct >= take_profit_pct:
+                should_exit = True
+                exit_reason = "take_profit"
+            
             # Exit nach Zeit
-            # WICHTIG: Wir schließen, wenn time_diff >= exit_minutes
-            # Aber time_diff könnte etwas größer sein, wenn Datenpunkte nicht genau im richtigen Moment kommen
-            # Das ist in Ordnung - wir schließen so schnell wie möglich nach exit_minutes
-            if time_diff >= exit_minutes:
+            elif time_diff >= exit_minutes:
                 should_exit = True
                 exit_reason = "time"
             
             # Exit bei Signal-Wechsel (wenn aktiviert) - aber nur nach Mindest-Haltedauer
-            # Dies verhindert, dass Positionen sofort wieder geschlossen werden
-            if exit_on_signal_change and signal == 0 and time_diff >= min_hold_minutes_for_signal_exit:
+            elif exit_on_signal_change and signal == 0 and time_diff >= min_hold_minutes_for_signal_exit:
                 should_exit = True
                 exit_reason = "signal_change"
             
-            # FIX: Exit wenn ein neuer Tag begonnen hat und Position vom vorherigen Tag ist
-            # Dies verhindert, dass Positionen über Nacht/Wochenende gehalten werden
-            # Die normale Exit-Prüfung (time_diff >= exit_minutes) wird bereits oben behandelt,
-            # aber wenn ein Tageswechsel stattfindet, schließen wir auch Positionen, die noch
-            # nicht exit_minutes alt sind, um über Nacht halten zu vermeiden
+            # Exit wenn ein neuer Tag begonnen hat
             if previous_date is not None and current_date != previous_date:
                 entry_date = entry_time.date() if hasattr(entry_time, 'date') else pd.Timestamp(entry_time).date()
-                # Wenn Position vom vorherigen Tag (oder älter) ist, schließe sie
-                # (verhindert über Nacht/Wochenende halten)
                 if entry_date < current_date:
-                    # Cappe die Haltedauer auf maximal exit_minutes für die Berechnung
-                    # um realistische Statistiken zu erhalten
-                    capped_time_diff = min(time_diff, exit_minutes)
                     should_exit = True
                     exit_reason = "time"
             
@@ -454,13 +521,10 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
                 profit = position_value * (profit_pct / 100)
                 capital += profit
                 
-                # Wenn durch Tageswechsel geschlossen und time_diff > exit_minutes:
-                # Cappe Haltedauer für realistische Statistiken
+                # Berechne Haltedauer
                 if exit_reason == "time" and previous_date is not None and current_date != previous_date:
                     entry_date = entry_time.date() if hasattr(entry_time, 'date') else pd.Timestamp(entry_time).date()
                     if entry_date < current_date and time_diff > exit_minutes:
-                        # Verwende exit_minutes statt der tatsächlichen Haltedauer
-                        # für realistische Statistiken (Position sollte nicht über Nacht gehalten werden)
                         actual_hold_time = exit_minutes
                     else:
                         actual_hold_time = time_diff
@@ -480,21 +544,45 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
                     "exit_reason": exit_reason
                 })
                 
-                open_position = None
+                positions_to_close.append(pos_idx)
         
-        # Entry bei Signal (nur wenn keine Position offen)
-        if signal == 1 and open_position is None:
-            position_value = capital * position_size_pct
-            open_position = (timestamp, price, position_value)
+        # Entferne geschlossene Positionen (von hinten nach vorne, um Indizes nicht zu verschieben)
+        for pos_idx in sorted(positions_to_close, reverse=True):
+            open_positions.pop(pos_idx)
+        
+        # Entry bei Signal (erlaubt mehrere Positionen gleichzeitig, max. 3)
+        if signal == 1 and len(open_positions) < 3:  # Maximal 3 gleichzeitige Positionen
+            # Dynamische Position-Größe basierend auf Confidence
+            if dynamic_position_size and "confidence" in combined.columns:
+                confidence_val = row.get("confidence") if "confidence" in row.index else None
+                if confidence_val is not None and pd.notna(confidence_val):
+                    confidence = float(confidence_val)
+                    # Skaliere Position-Größe: Confidence 0.5 = 50% der Basis, Confidence 1.0 = 150% der Basis
+                    # Linear zwischen 0.5 und 1.0 interpolieren
+                    if confidence >= 0.5:
+                        confidence_multiplier = 0.5 + (confidence - 0.5) * 2.0  # 0.5 -> 1.0, 1.0 -> 1.5
+                        confidence_multiplier = min(confidence_multiplier, 1.5)  # Cap bei 150%
+                    else:
+                        confidence_multiplier = 0.5  # Minimum 50% bei niedriger Confidence
+                    actual_position_size = position_size_pct * confidence_multiplier
+                else:
+                    actual_position_size = position_size_pct
+            else:
+                actual_position_size = position_size_pct
+            
+            # Prüfe ob genug Kapital verfügbar ist
+            position_value = capital * actual_position_size
+            if position_value > 0:  # Nur wenn genug Kapital vorhanden
+                open_positions.append((timestamp, price, position_value))
         
         # Aktualisiere previous_date für nächste Iteration
         previous_date = current_date
     
-    # Schließe offene Position am Ende
-    if open_position is not None:
-        entry_time, entry_price, position_value = open_position
-        final_price = combined["close"].iloc[-1]
-        final_time = combined.index[-1]
+    # Schließe alle offenen Positionen am Ende
+    final_price = combined["close"].iloc[-1]
+    final_time = combined.index[-1]
+    
+    for entry_time, entry_price, position_value in open_positions:
         time_diff = (final_time - entry_time).total_seconds() / 60
         
         profit_pct = ((final_price - entry_price) / entry_price) * 100
@@ -913,11 +1001,15 @@ def main():
         paper_results = simulate_paper_trading(
             signals=signals,
             prices=df[["close"]],
-            exit_minutes=15,  # OPTIMIERT: Von 30 auf 15 Minuten reduziert für mehr Trades
+            exit_minutes=30,  # Erhöht: Mehr Zeit für Gewinne (von 15 auf 30 Min)
             initial_capital=10000.0,
-            position_size_pct=0.1,
-            exit_on_signal_change=True,  # True = mehr Trades möglich
-            min_hold_minutes_for_signal_exit=2  # OPTIMIERT: Von 5 auf 2 Minuten reduziert für schnellere Exits
+            position_size_pct=0.25,  # Erhöht: Mehr Kapital pro Trade (von 10% auf 25%)
+            exit_on_signal_change=False,  # Deaktiviert: Lassen Stop-Loss/Take-Profit mehr greifen
+            min_hold_minutes_for_signal_exit=5,  # Erhöht: Weniger aggressive Signal-Wechsel-Exits
+            confidence_threshold=0.52,  # Gesenkt: Mehr Signale (von 0.55 auf 0.52)
+            stop_loss_pct=2.0,  # Stop-Loss bei -2.0% (mehr Spielraum)
+            take_profit_pct=1.5,  # Take-Profit bei +1.5% (höhere Gewinne)
+            dynamic_position_size=True  # Position-Größe basierend auf Confidence anpassen
         )
         
         # Zeitrahmen-Analyse
@@ -946,6 +1038,16 @@ def main():
         print(f"Gewinnende Trades:     {paper_results['winning_trades']}")
         print(f"Verlierende Trades:    {paper_results['losing_trades']}")
         print(f"Win Rate:              {paper_results['win_rate']:.2f}%")
+        
+        # Exit-Reason Statistik
+        if not paper_results['positions'].empty and 'exit_reason' in paper_results['positions'].columns:
+            exit_reasons = paper_results['positions']['exit_reason'].value_counts()
+            print(f"")
+            print(f"Exit-Gründe:")
+            for reason, count in exit_reasons.items():
+                pct = (count / len(paper_results['positions'])) * 100
+                print(f"  {reason}: {count} ({pct:.1f}%)")
+        
         print(f"")
         print(f"Durchschn. Profit:     ${paper_results['avg_profit']:.2f}")
         print(f"Durchschn. Profit %:   {paper_results['avg_profit_pct']:.2f}%")

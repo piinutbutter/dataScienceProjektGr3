@@ -899,8 +899,9 @@ In the current analysis period, Buy & Hold achieved a **2.93% total return**,  o
 
 | Metrik                    | Paper Trading | Buy & Hold | Differenz |
 |---------------------------|--------------|------------|-----------|
-| Total Return (%)          | 0.16         | 2.93       | -2.77     |
-| Finales Kapital ($)       | 10015.97    | 10292.82  | -276.85   |
+| Total Return (%)          |  1.10        | 2.95       | -1.85     |
+| Finales Kapital ($)       | 10109.77    | 10295.02  | -185.24   |
+
 
 
 The equity curve comparison (see Figure: "Equity Curve: Paper Trading vs. Buy & Hold") visually demonstrates the performance difference, with Buy & Hold showing steady growth throughout the period while Paper Trading remained relatively flat near the initial value.
