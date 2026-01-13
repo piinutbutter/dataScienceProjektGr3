@@ -908,12 +908,9 @@ The equity curve comparison (see Figure: "Equity Curve: Paper Trading vs. Buy & 
 **Purpose:**
 The Buy & Hold benchmark serves as a critical evaluation metric, allowing us to determine if the trading strategy provides alpha (excess returns) or if a passive investment approach would be more effective. This comparison is essential for strategy validation and helps identify periods where the model-based approach may underperform the market.
 
-================================================================================
-Metrik                    Paper Trading                   
---------------------------------------------------------------------------------
-Total Return (%)                        2.04              
-Win Rate (%)                           69.83            
-Sharpe Ratio                           31.25              
-Anzahl Trades                         232.00           
-Avg. Profit ($)                         0.88             
-================================================================================
+| Metric | Paper Trading alt | Papertrading neu |
+|--------|-------------------|------------------|
+| Total Return (%) | 0.11              | 2.04            |
+| Win Rate (%) | 55.10             | 69.83             |
+| Sharpe Ratio | 7.88              | 31.25             |
+| Number of Trades | 245               | 232.00          |
