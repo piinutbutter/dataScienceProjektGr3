@@ -393,6 +393,7 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
     capital = initial_capital
     positions = []
     open_positions = []  # Liste von (entry_time, entry_price, position_value) - erlaubt mehrere Positionen
+    total_committed_capital = 0.0  # Gesamtes Kapital, das aktuell in offenen Positionen gebunden ist
     
     # Merge Signale mit Preisen
     # WICHTIG: Wir iterieren über ALLE Preis-Datenpunkte (nicht nur Signal-Zeitpunkte)
@@ -544,14 +545,16 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
                     "exit_reason": exit_reason
                 })
                 
+                # Gebundenes Kapital freigeben
+                total_committed_capital -= position_value
                 positions_to_close.append(pos_idx)
         
         # Entferne geschlossene Positionen (von hinten nach vorne, um Indizes nicht zu verschieben)
         for pos_idx in sorted(positions_to_close, reverse=True):
             open_positions.pop(pos_idx)
         
-        # Entry bei Signal (erlaubt mehrere Positionen gleichzeitig, max. 3)
-        if signal == 1 and len(open_positions) < 3:  # Maximal 3 gleichzeitige Positionen
+        # Entry bei Signal (erlaubt mehrere Positionen gleichzeitig, max. 5)
+        if signal == 1 and len(open_positions) < 5:  # Maximal 5 gleichzeitige Positionen
             # Dynamische Position-Größe basierend auf Confidence
             if dynamic_position_size and "confidence" in combined.columns:
                 confidence_val = row.get("confidence") if "confidence" in row.index else None
@@ -570,10 +573,14 @@ def simulate_paper_trading(signals: pd.DataFrame, prices: pd.DataFrame,
             else:
                 actual_position_size = position_size_pct
             
+            # Berechne verfügbares Kapital (Kapital minus gebundenes Kapital in offenen Positionen)
+            available_capital = capital - total_committed_capital
+            position_value = available_capital * actual_position_size
+            
             # Prüfe ob genug Kapital verfügbar ist
-            position_value = capital * actual_position_size
-            if position_value > 0:  # Nur wenn genug Kapital vorhanden
+            if position_value > 0 and total_committed_capital + position_value <= capital:
                 open_positions.append((timestamp, price, position_value))
+                total_committed_capital += position_value  # Kapital als gebunden markieren
         
         # Aktualisiere previous_date für nächste Iteration
         previous_date = current_date
@@ -1001,14 +1008,14 @@ def main():
         paper_results = simulate_paper_trading(
             signals=signals,
             prices=df[["close"]],
-            exit_minutes=30,  # Erhöht: Mehr Zeit für Gewinne (von 15 auf 30 Min)
+            exit_minutes=60,  # Erhöht: Noch mehr Zeit für Gewinne (30 → 60 Min)
             initial_capital=10000.0,
-            position_size_pct=0.25,  # Erhöht: Mehr Kapital pro Trade (von 10% auf 25%)
+            position_size_pct=0.4,  # Erhöht: Noch mehr Kapital pro Trade (25% → 40%)
             exit_on_signal_change=False,  # Deaktiviert: Lassen Stop-Loss/Take-Profit mehr greifen
             min_hold_minutes_for_signal_exit=5,  # Erhöht: Weniger aggressive Signal-Wechsel-Exits
-            confidence_threshold=0.52,  # Gesenkt: Mehr Signale (von 0.55 auf 0.52)
-            stop_loss_pct=2.0,  # Stop-Loss bei -2.0% (mehr Spielraum)
-            take_profit_pct=1.5,  # Take-Profit bei +1.5% (höhere Gewinne)
+            confidence_threshold=0.50,  # Gesenkt: Noch mehr Signale (0.52 → 0.50)
+            stop_loss_pct=3.0,  # Stop-Loss bei -3.0% (mehr Spielraum für längere Haltedauer)
+            take_profit_pct=2.0,  # Take-Profit bei +2.0% (höhere Gewinne)
             dynamic_position_size=True  # Position-Größe basierend auf Confidence anpassen
         )
         

@@ -893,15 +893,14 @@ We implemented a Buy & Hold strategy as a benchmark to evaluate the performance 
 - Visualizations include Buy & Hold equity curves in comparison plots
 
 **Results:**
-In the current analysis period, Buy & Hold achieved a **2.93% total return**,  outperforming the Paper Trading strategy which returned **0.16%**. This comparison helps assess whether the trading strategy adds value beyond a simple buy-and-hold approach.
+In the current analysis period, Buy & Hold achieved a **2.92% total return**,  outperforming the Paper Trading strategy which returned **2.04**. This comparison helps assess whether the trading strategy adds value beyond a simple buy-and-hold approach.
 
 ### Performance Comparison: Paper Trading vs. Buy & Hold
 
 | Metrik                    | Paper Trading | Buy & Hold | Differenz |
 |---------------------------|--------------|------------|-----------|
-| Total Return (%)          |  1.10        | 2.95       | -1.85     |
-| Finales Kapital ($)       | 10109.77    | 10295.02  | -185.24   |
-
+| Total Return (%)          |  2.04       | 2.92       | 0.88     |
+| Finales Kapital ($)       | 10203.69    | 10291.76  | -88.06   |
 
 
 The equity curve comparison (see Figure: "Equity Curve: Paper Trading vs. Buy & Hold") visually demonstrates the performance difference, with Buy & Hold showing steady growth throughout the period while Paper Trading remained relatively flat near the initial value.
@@ -909,3 +908,12 @@ The equity curve comparison (see Figure: "Equity Curve: Paper Trading vs. Buy & 
 **Purpose:**
 The Buy & Hold benchmark serves as a critical evaluation metric, allowing us to determine if the trading strategy provides alpha (excess returns) or if a passive investment approach would be more effective. This comparison is essential for strategy validation and helps identify periods where the model-based approach may underperform the market.
 
+================================================================================
+Metrik                    Paper Trading                   
+--------------------------------------------------------------------------------
+Total Return (%)                        2.04              
+Win Rate (%)                           69.83            
+Sharpe Ratio                           31.25              
+Anzahl Trades                         232.00           
+Avg. Profit ($)                         0.88             
+================================================================================
